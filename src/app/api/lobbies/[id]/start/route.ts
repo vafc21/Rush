@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
+import { getServiceSupabase } from "@/lib/db/supabase";
+import { generateNickname } from "@/lib/lobby/nicknames";
+import { publishLobby } from "@/lib/realtime/pusher-server";
+
+const COUNTDOWN_MS = 5000;
+
+export async function POST(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireSession();
+  } catch (resp) {
+    return resp as Response;
+  }
+
+  const { id: lobbyId } = await context.params;
+  const supabase = getServiceSupabase();
+
+  const { data: lobby, error: le } = await supabase
+    .from("lobbies")
+    .select("id, status, size, duration_seconds")
+    .eq("id", lobbyId)
+    .single();
+  if (le || !lobby) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  if (lobby.status !== "waiting") {
+    return NextResponse.json({ error: "already started" }, { status: 409 });
+  }
+
+  // Count current seats
+  const { data: existing } = await supabase
+    .from("lobby_players")
+    .select("id")
+    .eq("lobby_id", lobbyId);
+  const seated = existing?.length ?? 0;
+  const botsNeeded = lobby.size - seated;
+
+  // Insert bots
+  const botRows = Array.from({ length: botsNeeded }, () => ({
+    lobby_id: lobbyId,
+    user_id: null,
+    nickname: generateNickname(),
+    is_bot: true,
+    balance_cents: 100000,
+  }));
+  if (botRows.length > 0) {
+    const { error: be } = await supabase.from("lobby_players").insert(botRows);
+    if (be) return NextResponse.json({ error: be.message }, { status: 500 });
+  }
+
+  // Transition to starting
+  const now = Date.now();
+  const startsAt = now + COUNTDOWN_MS;
+  const endsAt = startsAt + lobby.duration_seconds * 1000;
+
+  const { error: ue } = await supabase
+    .from("lobbies")
+    .update({
+      status: "active",                       // we'll move through 'starting' visually only
+      started_at: new Date(startsAt).toISOString(),
+    })
+    .eq("id", lobbyId);
+  if (ue) return NextResponse.json({ error: ue.message }, { status: 500 });
+
+  // Tell everyone we're counting down then going active.
+  await publishLobby(lobbyId, { type: "lobby_starting", lobbyId, startsAt });
+  await publishLobby(lobbyId, { type: "lobby_active", lobbyId, endsAt });
+
+  return NextResponse.json({ startsAt, endsAt });
+}

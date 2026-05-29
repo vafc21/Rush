@@ -35,11 +35,17 @@ export default function LobbyPage() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [selfNickname, setSelfNickname] = useState<string | null>(null);
 
-  // Initial snapshot load
+  // Initial snapshot load — also reconstructs startsAt/endsAt if the round
+  // is already in progress (i.e. the player refreshed mid-game).
   useEffect(() => {
     fetch(`/api/lobbies/${id}/snapshot`).then(async (r) => {
-      if (r.ok) {
-        setSnapshot(await r.json());
+      if (!r.ok) return;
+      const snap: Snapshot = await r.json();
+      setSnapshot(snap);
+      if (snap.lobby.status === "active" && snap.lobby.started_at) {
+        const startedMs = new Date(snap.lobby.started_at).getTime();
+        setStartsAt(startedMs);
+        setEndsAt(startedMs + snap.lobby.duration_seconds * 1000);
       }
     });
   }, [id]);
@@ -54,7 +60,7 @@ export default function LobbyPage() {
     });
   }, []);
 
-  // 1Hz tick for round timer
+  // 4Hz tick for round timer + countdown
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
@@ -80,6 +86,11 @@ export default function LobbyPage() {
               },
             ],
           };
+        case "lobby_starting":
+          // Round has begun on the server; flip the snapshot to active so
+          // the page shows the countdown overlay (then the game) without
+          // requiring a refresh.
+          return { ...s, lobby: { ...s.lobby, status: "active" } };
         case "balance_update":
           return {
             ...s,
@@ -110,6 +121,23 @@ export default function LobbyPage() {
     if (e.type === "lobby_starting") setStartsAt(e.startsAt);
     if (e.type === "lobby_active") setEndsAt(e.endsAt);
   });
+
+  // Bot activity poller: while the round is active and the countdown has
+  // finished, hit the bot-tick endpoint every 4s. Each call may make one
+  // random bot place a small dice bet (server decides). With multiple
+  // clients open, ticks coalesce naturally — the server is the source of
+  // truth on bot decisions.
+  const lobbyStatus = snapshot?.lobby.status;
+  const inCountdownForPoll = startsAt !== null && nowMs < startsAt;
+  useEffect(() => {
+    if (!id) return;
+    if (lobbyStatus !== "active") return;
+    if (inCountdownForPoll) return;
+    const t = setInterval(() => {
+      fetch(`/api/lobbies/${id}/bot-tick`, { method: "POST" }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(t);
+  }, [id, lobbyStatus, inCountdownForPoll]);
 
   if (!snapshot) return <main className="p-6">Loading…</main>;
 
@@ -164,20 +192,30 @@ function Waiting({
   const [busy, setBusy] = useState(false);
   async function start() {
     setBusy(true);
-    await fetch(`/api/lobbies/${snapshot.lobby.id}/start`, { method: "POST" });
+    const res = await fetch(`/api/lobbies/${snapshot.lobby.id}/start`, { method: "POST" });
+    // If Pusher takes a moment to deliver the lobby_starting event back to
+    // this very client (it should be near-instant but isn't guaranteed),
+    // we don't want to leave the host staring at the waiting room. The
+    // page-level Pusher handler flips status to "active" on lobby_starting,
+    // but as belt-and-braces we leave the button in its busy state — the
+    // page will rerender shortly after the event arrives.
+    if (!res.ok) setBusy(false);
   }
   return (
     <div className="rounded-lg bg-panel p-6">
       <h2 className="mb-2 text-xl font-bold">Waiting Room</h2>
       <p className="mb-4 text-secondary">
-        Share this code: <span className="font-mono text-2xl text-brand">{snapshot.lobby.code}</span>
+        Share this code:{" "}
+        <span className="font-mono text-2xl text-brand">{snapshot.lobby.code}</span>
       </p>
       <p className="mb-1 text-xs uppercase tracking-wider text-muted">
         Seated ({snapshot.players.length} / {snapshot.lobby.size})
       </p>
       <ul className="mb-4 space-y-1">
         {snapshot.players.map((p) => (
-          <li key={p.id} className="text-sm">{p.nickname}</li>
+          <li key={p.id} className="text-sm">
+            {p.nickname}
+          </li>
         ))}
       </ul>
       {isHost && (
@@ -185,15 +223,22 @@ function Waiting({
           {busy ? "Starting…" : "Start Match"}
         </Button>
       )}
+      {!isHost && (
+        <p className="text-xs text-muted">Waiting for the host to start the match…</p>
+      )}
     </div>
   );
 }
 
 function Countdown({ startsAt, nowMs }: { startsAt: number; nowMs: number }) {
-  const secondsLeft = Math.max(0, Math.ceil((startsAt - nowMs) / 1000));
+  const msLeft = Math.max(0, startsAt - nowMs);
+  const secondsLeft = Math.ceil(msLeft / 1000);
   return (
-    <div className="flex h-64 items-center justify-center rounded-lg bg-panel">
-      <div className="text-7xl font-black text-accent tabular-nums">{secondsLeft}</div>
+    <div className="flex h-64 flex-col items-center justify-center rounded-lg bg-panel">
+      <p className="mb-2 text-xs uppercase tracking-widest text-muted">Get ready</p>
+      <div className="text-7xl font-black text-accent tabular-nums">
+        {secondsLeft}
+      </div>
     </div>
   );
 }

@@ -42,6 +42,7 @@ export function TopBar({
         {showLeave && (
           <Link
             href="/play"
+            replace
             className="rounded-md bg-panel px-3 py-1 text-xs text-muted transition hover:text-white"
           >
             Leave

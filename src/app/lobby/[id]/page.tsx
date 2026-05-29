@@ -291,12 +291,14 @@ function EndOfRound({
       <div className="flex gap-3">
         <Link
           href="/play"
+          replace
           className="flex-1 rounded-md bg-accent px-4 py-3 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98]"
         >
           Back to Hub
         </Link>
         <Link
           href="/play"
+          replace
           className="rounded-md bg-panel px-4 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-panel/80 active:scale-[0.98]"
         >
           New Match

@@ -202,6 +202,7 @@ WAITING ──▶ STARTING ──▶ ACTIVE ──▶ ENDED
 - **Host quits mid-round** → nothing happens. Round runs to its natural end.
 - **All humans bust** → round still runs to the end. Busted players go to Last Chance zone; bots keep playing.
 - **Lobby code collision on creation** → retry with new code (up to 3 times). 1 in ~1M with 6-digit space.
+- **Round timer ends mid-Crash-round** → any in-flight Crash bets are auto-cashed-out at the current multiplier at the moment the lobby ends. Players are paid as if they cashed out at that instant. This avoids "stuck" bets and keeps end-of-round timing deterministic.
 
 ## Silent Bots
 
@@ -251,9 +252,10 @@ All randomness is generated **server-side** using Node's `crypto.randomInt` (or 
 
 - 5×5 grid (25 tiles). Player picks bet amount + mines count (1–24) before starting.
 - Server places mines randomly upfront and stores the layout in `bets.details`.
-- Player clicks tiles one at a time. Safe tile → multiplier grows by `(25 - mines - i) / (25 - mines - i - 1)` (precomputed table). Mine → entire bet is lost and the board reveals.
+- Player clicks tiles one at a time. Safe tile → cumulative multiplier grows by the ratio `(25 - i) / (25 - mines - i)` for the i-th click (the inverse of the probability that this tile would have been safe). Apply 0.99 RTP factor on cashout. Mine → entire bet is lost and the board reveals.
 - **Cash Out** button becomes live after the first click — locks in current multiplier × bet.
-- Math example: 3 mines, click 5 safe tiles → ~2.65x multiplier.
+- Math example: 3 mines, click 5 safe tiles → ~2.0x multiplier at cashout.
+- Implementation should precompute a `multiplier_table[mines_count][clicks]` at startup rather than recompute per click.
 
 ### Last Chance zone (unlocked only when busted)
 

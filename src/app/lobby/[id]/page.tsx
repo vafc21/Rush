@@ -76,6 +76,14 @@ export default function LobbyPage() {
 
   // Pusher subscription
   useLobbyChannel(id ?? null, (e) => {
+    // Side effects that don't belong inside a state-updater function run
+    // first. Calling setFloaters (via pushReactionRef) from inside
+    // setSnapshot's updater violates React's purity rule for updaters and
+    // can fire setState on another component during render.
+    if (e.type === "reaction" && pushReactionRef.current) {
+      pushReactionRef.current(e.emoji);
+    }
+
     setSnapshot((s) => {
       if (!s) return s;
       switch (e.type) {
@@ -124,9 +132,7 @@ export default function LobbyPage() {
             ),
           };
         case "reaction":
-          // Push to the floating layer if it's mounted; this never mutates
-          // the snapshot — reactions are purely transient.
-          if (pushReactionRef.current) pushReactionRef.current(e.emoji);
+          // Handled as a side effect above; snapshot is unchanged.
           return s;
         case "lobby_ended":
           return {

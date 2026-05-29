@@ -1,0 +1,55 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth/session";
+import { getServiceSupabase } from "@/lib/db/supabase";
+import { revealMinesTile } from "../handler";
+
+export async function POST(req: NextRequest) {
+  let session;
+  try {
+    session = await requireSession();
+  } catch (resp) {
+    return resp as Response;
+  }
+
+  const body = (await req.json().catch(() => ({}))) as {
+    betId?: string;
+    tileIndex?: number;
+  };
+  if (!body.betId || body.tileIndex === undefined) {
+    return NextResponse.json({ error: "missing fields" }, { status: 400 });
+  }
+
+  const supabase = getServiceSupabase();
+  // Resolve the player's seat in whichever lobby owns this bet, scoped to
+  // the requesting session to prevent cross-player reveals.
+  const identifier = session.kind === "guest" ? session.nickname : session.username;
+  const { data: bet } = await supabase
+    .from("bets")
+    .select("lobby_id")
+    .eq("id", body.betId)
+    .single();
+  if (!bet) {
+    return NextResponse.json({ error: "bet not found" }, { status: 404 });
+  }
+  const { data: seat } = await supabase
+    .from("lobby_players")
+    .select("id")
+    .eq("lobby_id", bet.lobby_id)
+    .eq("nickname", identifier)
+    .single();
+  if (!seat) {
+    return NextResponse.json({ error: "not your bet" }, { status: 403 });
+  }
+
+  try {
+    const result = await revealMinesTile({
+      lobbyPlayerId: seat.id,
+      betId: body.betId,
+      tileIndex: body.tileIndex,
+    });
+    return NextResponse.json(result);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "internal";
+    return NextResponse.json({ error: msg }, { status: 409 });
+  }
+}

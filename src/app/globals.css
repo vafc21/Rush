@@ -27,6 +27,11 @@ html, body {
   }
 }
 
+@keyframes rush-fade {
+  from { opacity: 0; }
+  to { opacity: 0.75; }
+}
+
 @keyframes rush-pop {
   0% {
     transform: scale(0.6);

@@ -168,6 +168,8 @@ export type MinesCashoutResult = {
   payoutCents: number;
   multiplier: number;
   newBalanceCents: number;
+  /** The full mine layout, revealed once the game is over. */
+  minePositions: number[];
 };
 
 export async function cashoutMinesGame(
@@ -212,5 +214,6 @@ export async function cashoutMinesGame(
     payoutCents,
     multiplier,
     newBalanceCents: newBal as number,
+    minePositions: details.mine_positions,
   };
 }

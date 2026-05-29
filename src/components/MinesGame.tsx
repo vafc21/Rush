@@ -4,7 +4,16 @@ import { Button } from "./Button";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { MIN_MINES, MAX_MINES, MINES_TILES } from "@/lib/games/mines";
 
-type TileState = "hidden" | "safe" | "mine";
+/**
+ * Visual state per tile:
+ *  - hidden:               still clickable (active game)
+ *  - safe-clicked:         player revealed it during play (bright green ✓)
+ *  - safe-missed:          un-clicked but safe — shown dim after the game ends
+ *  - mine:                 a mine — shown red after the game ends
+ *  - locked:               game over, this tile was unrevealed (used during
+ *                          a brief intermediate state; rarely hit in practice)
+ */
+type TileState = "hidden" | "safe-clicked" | "safe-missed" | "mine" | "locked";
 
 type Game = {
   betId: string;
@@ -124,9 +133,17 @@ export function MinesGame({
       setError(body.error ?? "cashout failed");
       return;
     }
-    const data = (await res.json()) as { payoutCents: number; multiplier: number };
+    const data = (await res.json()) as {
+      payoutCents: number;
+      multiplier: number;
+      minePositions: number[];
+    };
     setLastPayout(data.payoutCents);
-    setGame((g) => (g ? { ...g, status: "cashed" } : g));
+    setGame((g) =>
+      g
+        ? { ...g, status: "cashed", minePositions: data.minePositions }
+        : g
+    );
   }
 
   function reset() {
@@ -135,10 +152,14 @@ export function MinesGame({
     setLastPayout(null);
   }
 
+  const gameOver = game?.status === "exploded" || game?.status === "cashed";
   const tiles: TileState[] = Array.from({ length: MINES_TILES }, (_, i) => {
     if (!game) return "hidden";
-    if (game.revealed.has(i)) return "safe";
+    if (game.revealed.has(i)) return "safe-clicked";
     if (game.minePositions?.includes(i)) return "mine";
+    // un-clicked, not a mine — show as a missed-safe if the game is over,
+    // otherwise it's a regular hidden tile the player can still click
+    if (gameOver) return "safe-missed";
     return "hidden";
   });
 
@@ -166,31 +187,42 @@ export function MinesGame({
 
       {/* 5x5 grid */}
       <div className="grid grid-cols-5 gap-2">
-        {tiles.map((state, i) => (
-          <button
-            key={i}
-            disabled={!game || game.status !== "playing" || state !== "hidden"}
-            onClick={() => reveal(i)}
-            className={`aspect-square rounded-md text-2xl font-bold transition-all duration-200 active:scale-95 ${
-              state === "hidden"
-                ? game?.status === "exploded" || game?.status === "cashed"
-                  ? "bg-bg/40 cursor-default"
-                  : "bg-bg hover:bg-accent/20 hover:scale-[1.03] cursor-pointer"
-                : state === "safe"
-                  ? "bg-accent/20 text-accent"
-                  : "bg-red-500/30 text-red-300"
-            }`}
-            style={
-              state !== "hidden"
-                ? {
-                    animation: "rush-pop 250ms ease-out",
-                  }
-                : undefined
-            }
-          >
-            {state === "safe" ? "✓" : state === "mine" ? "💣" : ""}
-          </button>
-        ))}
+        {tiles.map((state, i) => {
+          const isClickable = state === "hidden" && game?.status === "playing";
+          const classes =
+            state === "hidden"
+              ? isClickable
+                ? "bg-bg hover:bg-accent/20 hover:scale-[1.03] cursor-pointer"
+                : "bg-bg/40 cursor-default"
+              : state === "safe-clicked"
+                ? "bg-accent/20 text-accent"
+                : state === "safe-missed"
+                  ? "bg-bg/30 text-muted/70"
+                  : state === "mine"
+                    ? "bg-red-500/30 text-red-300"
+                    : "bg-bg/30";
+          return (
+            <button
+              key={i}
+              disabled={!isClickable}
+              onClick={() => reveal(i)}
+              className={`aspect-square rounded-md text-2xl font-bold transition-all duration-200 active:scale-95 ${classes}`}
+              style={
+                state !== "hidden"
+                  ? { animation: "rush-pop 250ms ease-out" }
+                  : undefined
+              }
+            >
+              {state === "safe-clicked"
+                ? "✓"
+                : state === "safe-missed"
+                  ? "✓"
+                  : state === "mine"
+                    ? "💣"
+                    : ""}
+            </button>
+          );
+        })}
       </div>
 
       {/* Pre-game controls */}

@@ -108,6 +108,29 @@ export function EndOfRoundGraph({
   // Reference line at starting balance
   const yStart = yScale(lobby.starting_balance_cents);
 
+  // Lobby average trajectory: sample 60 evenly-spaced times across the
+  // round and average everyone's balance at each sample. Each player's
+  // trajectory is a step function (balance changes at bet times) so the
+  // sample is "their most-recent point at-or-before t".
+  const SAMPLES = 60;
+  function balanceAt(points: Array<[number, number]>, tMs: number): number {
+    let bal = points[0][1];
+    for (const [t, b] of points) {
+      if (t <= tMs) bal = b;
+      else break;
+    }
+    return bal;
+  }
+  const avgPoints: string[] = [];
+  if (trajectories.length > 0) {
+    for (let i = 0; i <= SAMPLES; i++) {
+      const tMs = (i / SAMPLES) * durationMs;
+      const balances = trajectories.map((t) => balanceAt(t.points, tMs));
+      const avg = balances.reduce((s, b) => s + b, 0) / balances.length;
+      avgPoints.push(`${xScale(tMs)},${yScale(avg)}`);
+    }
+  }
+
   // Final standings, sorted by rank
   const standings = [...players].sort(
     (a, b) => (a.final_rank ?? 999) - (b.final_rank ?? 999)
@@ -120,6 +143,32 @@ export function EndOfRoundGraph({
         <p className="text-xs uppercase tracking-widest text-muted">
           Round complete
         </p>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-[2px] w-4 bg-accent" />
+          You
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-[2px] w-4 bg-brand" />
+          Winner
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-[2px] w-4"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(90deg,#B1BAD3 0 3px,transparent 3px 5px)",
+            }}
+          />
+          Lobby average
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-[2px] w-4 bg-muted opacity-50" />
+          Others
+        </span>
       </div>
 
       {/* Graph */}
@@ -140,6 +189,21 @@ export function EndOfRoundGraph({
             strokeDasharray="4 4"
             opacity={0.4}
           />
+          {/* Lobby average — dashed, fades in alongside the player lines. */}
+          {avgPoints.length > 0 && (
+            <polyline
+              points={avgPoints.join(" ")}
+              fill="none"
+              stroke="#B1BAD3"
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+              style={{
+                opacity: 0,
+                animation: "rush-fade 4.5s ease-out forwards",
+              }}
+            />
+          )}
           {/* Player trajectories */}
           {sortedLines.map((t) => {
             const isSelf = t.player.nickname === selfNickname;

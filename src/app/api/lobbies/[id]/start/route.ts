@@ -39,7 +39,9 @@ export async function POST(
   const seated = existing?.length ?? 0;
   const botsNeeded = lobby.size - seated;
 
-  // Insert bots
+  // Insert bots and broadcast a player_joined event for each one so
+  // already-connected clients add them to their leaderboard without
+  // having to re-fetch the snapshot.
   const botRows = Array.from({ length: botsNeeded }, () => ({
     lobby_id: lobbyId,
     user_id: null,
@@ -48,8 +50,19 @@ export async function POST(
     balance_cents: 100000,
   }));
   if (botRows.length > 0) {
-    const { error: be } = await supabase.from("lobby_players").insert(botRows);
+    const { data: insertedBots, error: be } = await supabase
+      .from("lobby_players")
+      .insert(botRows)
+      .select("id, nickname, is_bot");
     if (be) return NextResponse.json({ error: be.message }, { status: 500 });
+    for (const bot of insertedBots ?? []) {
+      await publishLobby(lobbyId, {
+        type: "player_joined",
+        lobbyPlayerId: bot.id,
+        nickname: bot.nickname,
+        isBot: bot.is_bot,
+      });
+    }
   }
 
   // Transition to starting

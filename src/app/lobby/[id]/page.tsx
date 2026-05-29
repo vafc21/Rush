@@ -139,6 +139,23 @@ export default function LobbyPage() {
     return () => clearInterval(t);
   }, [id, lobbyStatus, inCountdownForPoll]);
 
+  // Local-development end-of-round fallback. The "real" round-end runs as
+  // a Vercel cron every minute (vercel.json), which doesn't exist when the
+  // app is running on localhost. When our locally-computed timer reaches
+  // zero and the lobby is still active, fire the cron endpoint directly.
+  // The cron is idempotent — calling it for a not-yet-expired lobby is a
+  // no-op, and after Pusher's lobby_ended event lands the status flips
+  // away from "active" so this effect stops firing.
+  useEffect(() => {
+    if (lobbyStatus !== "active") return;
+    if (endsAt === null) return;
+    if (nowMs < endsAt) return;
+    const handle = setTimeout(() => {
+      fetch(`/api/cron/end-rounds`).catch(() => {});
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [lobbyStatus, endsAt, nowMs]);
+
   if (!snapshot) return <main className="p-6">Loading…</main>;
 
   const self = snapshot.players.find((p) => p.nickname === selfNickname);

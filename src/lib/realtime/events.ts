@@ -9,6 +9,7 @@ export type LobbyEvent =
   | { type: "lobby_active"; lobbyId: string; endsAt: number }
   | { type: "balance_update"; lobbyPlayerId: string; balanceCents: number }
   | { type: "player_busted"; lobbyPlayerId: string }
+  | { type: "reaction"; lobbyPlayerId: string; emoji: string }
   | { type: "lobby_ended"; lobbyId: string; finalRanks: { lobbyPlayerId: string; rank: number; balanceCents: number }[] };
 
 export const LOBBY_EVENT = "lobby-event";

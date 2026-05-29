@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/Button";
@@ -7,6 +7,8 @@ import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
 import { GameTabs } from "@/components/GameTabs";
 import { LastChanceWheel } from "@/components/LastChanceWheel";
 import { EndOfRoundGraph } from "@/components/EndOfRoundGraph";
+import { ReactionsBar } from "@/components/ReactionsBar";
+import { ReactionsLayer } from "@/components/ReactionsLayer";
 import Link from "next/link";
 import { useLobbyChannel } from "@/lib/realtime/pusher-client";
 
@@ -37,6 +39,9 @@ export default function LobbyPage() {
   const [startsAt, setStartsAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [selfNickname, setSelfNickname] = useState<string | null>(null);
+  // Ref-bridge for pushing emojis into the floating layer from outside
+  // the layer's own render scope (specifically, from the pusher handler).
+  const pushReactionRef = useRef<((emoji: string) => void) | null>(null);
 
   // Initial snapshot load — also reconstructs startsAt/endsAt if the round
   // is already in progress (i.e. the player refreshed mid-game).
@@ -118,6 +123,11 @@ export default function LobbyPage() {
               p.id === e.lobbyPlayerId ? { ...p, is_busted: true } : p
             ),
           };
+        case "reaction":
+          // Push to the floating layer if it's mounted; this never mutates
+          // the snapshot — reactions are purely transient.
+          if (pushReactionRef.current) pushReactionRef.current(e.emoji);
+          return s;
         case "lobby_ended":
           return {
             ...s,
@@ -209,8 +219,14 @@ export default function LobbyPage() {
             <EndOfRound lobbyId={id!} selfNickname={selfNickname} />
           )}
         </div>
-        <LeaderboardPanel seats={seats} selfId={self?.id ?? null} />
+        <div className="flex flex-col gap-3">
+          <LeaderboardPanel seats={seats} selfId={self?.id ?? null} />
+          {snapshot.lobby.status === "active" && !inCountdown && (
+            <ReactionsBar lobbyId={id!} />
+          )}
+        </div>
       </main>
+      <ReactionsLayer pushRef={pushReactionRef} />
     </>
   );
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { placeDiceBet } from "@/app/api/games/dice/play/handler";
+import { publishLobby } from "@/lib/realtime/pusher-server";
+
+const BOT_REACTIONS = ["🔥", "😱", "💀", "🚀"] as const;
 
 /**
  * Called periodically by any active lobby client (every ~4s, see lobby page).
@@ -47,6 +50,18 @@ export async function POST(
   }
 
   const bot = bots[Math.floor(Math.random() * bots.length)];
+
+  // ~12% chance to send a reaction instead of (or in addition to) betting.
+  // Keeps the lobby feeling alive between bets.
+  if (Math.random() < 0.12) {
+    const emoji =
+      BOT_REACTIONS[Math.floor(Math.random() * BOT_REACTIONS.length)];
+    await publishLobby(lobbyId, {
+      type: "reaction",
+      lobbyPlayerId: bot.id,
+      emoji,
+    });
+  }
 
   // Bet 1–10% of current balance, min $1.00.
   const balanceCents = bot.balance_cents;

@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/Button";
 import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
-import { DiceGame } from "@/components/DiceGame";
+import { GameTabs } from "@/components/GameTabs";
 import { LastChanceWheel } from "@/components/LastChanceWheel";
 import { EndOfRoundGraph } from "@/components/EndOfRoundGraph";
 import Link from "next/link";
@@ -202,7 +202,7 @@ export default function LobbyPage() {
             self.is_busted ? (
               <LastChanceWheel lobbyId={id!} />
             ) : (
-              <DiceGame lobbyId={id!} balanceCents={self.balance_cents} />
+              <GameTabs lobbyId={id!} balanceCents={self.balance_cents} />
             )
           )}
           {snapshot.lobby.status === "ended" && (

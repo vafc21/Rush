@@ -130,54 +130,32 @@ git commit -m "chore: scaffold Next.js 15 + TypeScript + Tailwind"
 
 ## Task 2: Configure Tailwind theme with Rush colors
 
+**Note:** Task 1 produced **Tailwind v4** (the current default), which configures theme via CSS using `@theme`, not via `tailwind.config.ts`. This task is updated accordingly.
+
 **Files:**
-- Modify: `tailwind.config.ts`
-- Modify: `src/app/globals.css`
+- Modify: `src/app/globals.css` (full rewrite)
 
-- [ ] **Step 1: Update Tailwind config**
+- [ ] **Step 1: Rewrite globals.css with the Rush theme**
 
-Replace `tailwind.config.ts` with:
-
-```ts
-import type { Config } from "tailwindcss";
-
-export default {
-  content: ["./src/**/*.{ts,tsx}"],
-  theme: {
-    extend: {
-      colors: {
-        bg: "#0F212E",       // page background — deep navy
-        panel: "#1A2C38",    // card / panel background
-        accent: "#00E701",   // green — money / win signal
-        brand: "#FFB800",    // gold — Rush brand accent
-        muted: "#7B8BA8",    // tertiary text
-        secondary: "#B1BAD3", // secondary text
-      },
-      fontFamily: {
-        sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
-      },
-      fontVariantNumeric: {
-        tabular: "tabular-nums",
-      },
-    },
-  },
-  plugins: [],
-} satisfies Config;
-```
-
-- [ ] **Step 2: Update globals.css**
-
-Replace the body of `src/app/globals.css` (keep the `@tailwind` directives) with:
+Replace the entire contents of `src/app/globals.css` with:
 
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0F212E;
+  --color-panel: #1A2C38;
+  --color-accent: #00E701;
+  --color-brand: #FFB800;
+  --color-muted: #7B8BA8;
+  --color-secondary: #B1BAD3;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
 
 html, body {
-  background-color: #0F212E;
+  background-color: var(--color-bg);
   color: #ffffff;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   margin: 0;
 }
 
@@ -186,15 +164,33 @@ html, body {
 }
 ```
 
-- [ ] **Step 3: Quick visual check**
+In Tailwind v4, defining `--color-bg`, `--color-panel`, etc. inside `@theme` automatically creates the matching utility classes (`bg-bg`, `bg-panel`, `text-accent`, `border-panel`, etc.) that later tasks rely on.
 
-Run `npm run dev`, open http://localhost:3000, confirm the background is now deep navy (`#0F212E`). Stop the dev server.
+- [ ] **Step 2: Verify the dev server still serves and the theme applies**
 
-- [ ] **Step 4: Commit**
+Start the dev server in the background:
 
 ```bash
-git add tailwind.config.ts src/app/globals.css
-git commit -m "feat: configure Tailwind theme with Rush color palette"
+npm run dev &
+sleep 4
+curl -s http://localhost:3000 | head -20
+```
+
+Expected: HTML response that mentions the Rush color values once Tailwind processes them. Stop with `kill %1` (or `pkill -f "next dev"`).
+
+A stronger check: `npm run build` should complete without Tailwind compile errors:
+
+```bash
+npm run build
+```
+
+Expected: build completes, no Tailwind errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/globals.css
+git commit -m "feat: configure Tailwind v4 theme with Rush color palette"
 ```
 
 ---

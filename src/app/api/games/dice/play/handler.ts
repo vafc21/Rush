@@ -1,5 +1,6 @@
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { diceOutcome, MIN_ROLL_UNDER, MAX_ROLL_UNDER } from "@/lib/games/dice";
+import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
 
 export type DiceBetInput = {
@@ -17,7 +18,8 @@ export type DiceBetResult = {
 };
 
 export async function placeDiceBet(input: DiceBetInput): Promise<DiceBetResult> {
-  if (input.betCents < 100) throw new Error("bet below minimum");
+  if (input.betCents < MIN_BET_CENTS) throw new Error("bet below minimum");
+  if (input.betCents > MAX_BET_CENTS) throw new Error("bet exceeds maximum");
   if (input.rollUnder < MIN_ROLL_UNDER || input.rollUnder > MAX_ROLL_UNDER) {
     throw new Error("invalid rollUnder");
   }

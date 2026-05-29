@@ -5,6 +5,9 @@ import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/Button";
 import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
 import { DiceGame } from "@/components/DiceGame";
+import { LastChanceWheel } from "@/components/LastChanceWheel";
+import { EndOfRoundGraph } from "@/components/EndOfRoundGraph";
+import Link from "next/link";
 import { useLobbyChannel } from "@/lib/realtime/pusher-client";
 
 type Snapshot = {
@@ -95,7 +98,17 @@ export default function LobbyPage() {
           return {
             ...s,
             players: s.players.map((p) =>
-              p.id === e.lobbyPlayerId ? { ...p, balance_cents: e.balanceCents } : p
+              p.id === e.lobbyPlayerId
+                ? {
+                    ...p,
+                    balance_cents: e.balanceCents,
+                    // Rule (mirrors server-side bust check in dice handler):
+                    // balance < $1 = busted. Re-deriving here lets a Last
+                    // Chance Wheel win lift the busted flag without needing
+                    // a separate pusher event.
+                    is_busted: e.balanceCents < 100,
+                  }
+                : p
             ),
           };
         case "player_busted":
@@ -175,6 +188,7 @@ export default function LobbyPage() {
       <TopBar
         balanceCents={self?.balance_cents}
         roundSecondsLeft={secondsLeft}
+        showLeave
       />
       <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 md:flex-row">
         <div className="flex-1">
@@ -185,10 +199,14 @@ export default function LobbyPage() {
             <Countdown startsAt={startsAt!} nowMs={nowMs} />
           )}
           {snapshot.lobby.status === "active" && !inCountdown && self && (
-            <DiceGame lobbyId={id!} balanceCents={self.balance_cents} />
+            self.is_busted ? (
+              <LastChanceWheel lobbyId={id!} />
+            ) : (
+              <DiceGame lobbyId={id!} balanceCents={self.balance_cents} />
+            )
           )}
           {snapshot.lobby.status === "ended" && (
-            <EndOfRound players={snapshot.players} selfNickname={selfNickname} />
+            <EndOfRound lobbyId={id!} selfNickname={selfNickname} />
           )}
         </div>
         <LeaderboardPanel seats={seats} selfId={self?.id ?? null} />
@@ -261,38 +279,29 @@ function Countdown({ startsAt, nowMs }: { startsAt: number; nowMs: number }) {
 }
 
 function EndOfRound({
-  players,
+  lobbyId,
   selfNickname,
 }: {
-  players: Snapshot["players"];
+  lobbyId: string;
   selfNickname: string | null;
 }) {
-  const ranked = [...players].sort(
-    (a, b) => (a.final_rank ?? 999) - (b.final_rank ?? 999)
-  );
   return (
-    <div className="rounded-lg bg-panel p-6">
-      <h2 className="mb-4 text-xl font-bold">Final Standings</h2>
-      <ol className="space-y-1">
-        {ranked.map((p) => {
-          const isSelf = p.nickname === selfNickname;
-          return (
-            <li
-              key={p.id}
-              className={`flex items-center justify-between rounded px-2 py-2 ${
-                isSelf ? "bg-accent/10 text-accent" : ""
-              } ${p.final_rank === 1 ? "font-bold text-brand" : ""}`}
-            >
-              <span>
-                #{p.final_rank ?? "—"} {p.nickname}
-              </span>
-              <span className="tabular-nums">
-                ${(p.balance_cents / 100).toFixed(2)}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+    <div className="space-y-4">
+      <EndOfRoundGraph lobbyId={lobbyId} selfNickname={selfNickname} />
+      <div className="flex gap-3">
+        <Link
+          href="/play"
+          className="flex-1 rounded-md bg-accent px-4 py-3 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98]"
+        >
+          Back to Hub
+        </Link>
+        <Link
+          href="/play"
+          className="rounded-md bg-panel px-4 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-panel/80 active:scale-[0.98]"
+        >
+          New Match
+        </Link>
+      </div>
     </div>
   );
 }

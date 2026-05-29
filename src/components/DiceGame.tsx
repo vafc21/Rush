@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 
 type LastRoll = {
   won: boolean;
@@ -55,8 +56,12 @@ export function DiceGame({
 
   async function roll() {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
-    if (!betCents || betCents < 100) {
-      setError("Minimum bet is $1.00");
+    if (!betCents || betCents < MIN_BET_CENTS) {
+      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      return;
+    }
+    if (betCents > MAX_BET_CENTS) {
+      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per roll`);
       return;
     }
     if (betCents > balanceCents) {
@@ -250,12 +255,22 @@ export function DiceGame({
 
       {/* Bet input */}
       <div>
-        <p className="mb-1 text-xs uppercase tracking-wider text-muted">Bet</p>
+        <div className="mb-1 flex items-baseline justify-between">
+          <p className="text-xs uppercase tracking-wider text-muted">Bet</p>
+          <p className="text-[10px] text-muted">
+            Max{" "}
+            <span className="tabular-nums text-secondary">
+              ${(MAX_BET_CENTS / 100).toFixed(0)}
+            </span>{" "}
+            / roll
+          </p>
+        </div>
         <div className="flex gap-2">
           <input
             className="flex-1 rounded-md bg-bg px-3 py-2 tabular-nums text-white outline-none ring-1 ring-transparent focus:ring-accent/60 transition"
             type="number"
-            min="1"
+            min={MIN_BET_CENTS / 100}
+            max={MAX_BET_CENTS / 100}
             step="0.50"
             value={betDollars}
             disabled={busy}
@@ -266,7 +281,10 @@ export function DiceGame({
             disabled={busy}
             onClick={() =>
               setBetDollars(
-                Math.max(1, parseFloat(betDollars || "1") / 2).toFixed(2)
+                Math.max(
+                  MIN_BET_CENTS / 100,
+                  parseFloat(betDollars || "1") / 2
+                ).toFixed(2)
               )
             }
             className="rounded-md bg-bg px-3 text-xs font-semibold text-secondary transition hover:bg-bg/70 active:scale-95 disabled:opacity-50"
@@ -277,11 +295,29 @@ export function DiceGame({
             type="button"
             disabled={busy}
             onClick={() =>
-              setBetDollars((parseFloat(betDollars || "1") * 2).toFixed(2))
+              setBetDollars(
+                Math.min(
+                  MAX_BET_CENTS / 100,
+                  Math.min(balanceCents, MAX_BET_CENTS) / 100,
+                  parseFloat(betDollars || "1") * 2
+                ).toFixed(2)
+              )
             }
             className="rounded-md bg-bg px-3 text-xs font-semibold text-secondary transition hover:bg-bg/70 active:scale-95 disabled:opacity-50"
           >
             2×
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              setBetDollars(
+                (Math.min(balanceCents, MAX_BET_CENTS) / 100).toFixed(2)
+              )
+            }
+            className="rounded-md bg-brand/15 px-3 text-xs font-bold text-brand transition hover:bg-brand/25 active:scale-95 disabled:opacity-50"
+          >
+            Max
           </button>
         </div>
       </div>

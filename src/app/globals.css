@@ -20,3 +20,9 @@ html, body {
 * {
   box-sizing: border-box;
 }
+
+@keyframes rush-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

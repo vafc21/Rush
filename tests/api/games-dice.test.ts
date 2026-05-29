@@ -41,12 +41,25 @@ describe("placeDiceBet", () => {
   });
 
   it("rejects insufficient balance atomically", async () => {
+    // After the first test the player has ~$100.98. A $150 bet stays
+    // under the $200 cap but exceeds their balance — should trip the
+    // atomic deduct check rather than the max-bet check.
     await expect(
       placeDiceBet({
         lobbyPlayerId: playerId,
-        betCents: 999_999,
+        betCents: 15_000,
         rollUnder: 50,
       })
     ).rejects.toThrow(/insufficient/i);
+  });
+
+  it("rejects bets above the per-roll maximum", async () => {
+    await expect(
+      placeDiceBet({
+        lobbyPlayerId: playerId,
+        betCents: 30_000, // $300, over the $200 cap
+        rollUnder: 50,
+      })
+    ).rejects.toThrow(/maximum/i);
   });
 });

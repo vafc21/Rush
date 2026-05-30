@@ -57,28 +57,6 @@ export function CrashGame({
     return () => clearInterval(t);
   }, [round]);
 
-  // Local-dev kickstart for Crash rounds. On Vercel a real cron generates
-  // rounds every minute; locally we poll the same endpoint every 2 seconds
-  // whenever we don't have a live round. This is robust against the
-  // initial kickstart failing or the Pusher event being missed — the
-  // endpoint is idempotent so re-firing is safe.
-  useEffect(() => {
-    let cancelled = false;
-    const phaseNow = phase;
-    if (phaseNow === "running" || phaseNow === "betting") return;
-    const tick = () => {
-      if (cancelled) return;
-      fetch("/api/cron/crash-tick").catch(() => {});
-    };
-    tick(); // immediate
-    const id = setInterval(tick, 2000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
-
   // Listen for round_start, round_end, cashout
   const handleEvent = (e: LobbyEvent) => {
     if (e.type === "crash_round_start") {
@@ -146,6 +124,21 @@ export function CrashGame({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, myBet?.status, currentMultiplier, autoCashoutEnabled]);
+
+  // Local-dev kickstart for Crash rounds. On Vercel a real cron generates
+  // rounds every minute; locally we poll the same endpoint every 2 seconds
+  // whenever we're not in an active round phase. The endpoint is
+  // idempotent so re-firing is safe.
+  const idleForCrash =
+    phase === "waiting" || phase === "aftermath";
+  useEffect(() => {
+    if (!idleForCrash) return;
+    fetch("/api/cron/crash-tick").catch(() => {});
+    const id = setInterval(() => {
+      fetch("/api/cron/crash-tick").catch(() => {});
+    }, 2000);
+    return () => clearInterval(id);
+  }, [idleForCrash]);
 
   // Countdown shown during betting window
   const secondsToStart = round

@@ -23,12 +23,12 @@ const PEG_SPACING_X = W / (ROWS + 2);            // horizontal peg spacing
 const PEG_SPACING_Y = PEG_SPACING_X * 1.05;      // vertical between rows
 const PEG_R = 1.8;
 const BALL_R = 4.2;
-const GRAVITY = 60;                              // units / s^2  (high gravity for snappy feel)
-const SIDE_DAMP = 0.65;                          // wall bounce damp
-const PEG_DEFLECT_VX = 32;                       // horizontal speed kicked by peg
-const PEG_DEFLECT_VY = -10;                      // small upward bounce
+const GRAVITY = 600;                             // units / s^2 — tuned so a full fall takes ~2.5s
+const SIDE_DAMP = 0.55;                          // wall bounce damp
+const PEG_DEFLECT_VX = 90;                       // horizontal speed kicked by peg
+const PEG_DEFLECT_VY = -40;                      // upward bounce when peg hit
 const SLOT_FLOOR_Y = TOP_PAD + (ROWS + 1) * PEG_SPACING_Y + 6;
-const SETTLE_VY = 1;                             // when |vy| drops below this near floor, settle
+const SETTLE_VY = 4;                             // when |vy| drops below this near floor, settle
 
 const RISK_LABELS: Record<Risk, string> = {
   low: "Low",

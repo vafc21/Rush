@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { TopBar } from "@/components/TopBar";
@@ -138,12 +139,22 @@ export default function Hub() {
                 {me.nickname}
               </span>
             </span>
-            <button
-              onClick={signOut}
-              className="text-xs font-semibold text-muted transition hover:text-white"
-            >
-              {me.kind === "user" ? "Sign out" : "Exit"}
-            </button>
+            <div className="flex items-center gap-3">
+              {me.kind === "user" && (
+                <Link
+                  href="/profile"
+                  className="text-xs font-semibold text-muted transition hover:text-white"
+                >
+                  Profile
+                </Link>
+              )}
+              <button
+                onClick={signOut}
+                className="text-xs font-semibold text-muted transition hover:text-white"
+              >
+                {me.kind === "user" ? "Sign out" : "Exit"}
+              </button>
+            </div>
           </div>
         )}
         <h1 className="text-xl font-bold">Play</h1>

@@ -206,7 +206,7 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
 
       s.raf = requestAnimationFrame(tick);
     };
-    s.raf = requestAnimationFrame(tick);
+    stateRef.current.raf = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(stateRef.current.raf);
   }, [die]);

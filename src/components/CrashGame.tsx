@@ -57,12 +57,27 @@ export function CrashGame({
     return () => clearInterval(t);
   }, [round]);
 
-  // Kickstart: if there's no round when we mount, fire the crash-tick cron
-  // so a round gets generated (local-dev convenience).
+  // Local-dev kickstart for Crash rounds. On Vercel a real cron generates
+  // rounds every minute; locally we poll the same endpoint every 2 seconds
+  // whenever we don't have a live round. This is robust against the
+  // initial kickstart failing or the Pusher event being missed — the
+  // endpoint is idempotent so re-firing is safe.
   useEffect(() => {
-    if (round) return;
-    fetch("/api/cron/crash-tick").catch(() => {});
-  }, [round]);
+    let cancelled = false;
+    const phaseNow = phase;
+    if (phaseNow === "running" || phaseNow === "betting") return;
+    const tick = () => {
+      if (cancelled) return;
+      fetch("/api/cron/crash-tick").catch(() => {});
+    };
+    tick(); // immediate
+    const id = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // Listen for round_start, round_end, cashout
   const handleEvent = (e: LobbyEvent) => {
@@ -112,9 +127,9 @@ export function CrashGame({
         currentMultiplier = round.crashAt;
       } else {
         // Old round finished — wait for the next cron tick to provide one.
+        // The crash-tick poller above keeps firing while we're in this
+        // state so a new round will be generated within a couple seconds.
         phase = "waiting";
-        // Help things along in local dev
-        fetch("/api/cron/crash-tick").catch(() => {});
       }
     }
   }

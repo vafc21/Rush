@@ -151,19 +151,22 @@ export default function LobbyPage() {
     if (e.type === "lobby_active") setEndsAt(e.endsAt);
   });
 
-  // Bot activity poller: while the round is active and the countdown has
-  // finished, hit the bot-tick endpoint every 4s. Each call may make one
-  // random bot place a small dice bet (server decides). With multiple
-  // clients open, ticks coalesce naturally — the server is the source of
-  // truth on bot decisions.
+  // Bot activity poller + crash-tick poller. Both run on a 4-second cadence
+  // while the round is live so bots keep playing and Crash rounds keep
+  // cycling. In production these have Vercel crons, but local dev relies
+  // on these polls.
   const lobbyStatus = snapshot?.lobby.status;
   const inCountdownForPoll = startsAt !== null && nowMs < startsAt;
   useEffect(() => {
     if (!id) return;
     if (lobbyStatus !== "active") return;
     if (inCountdownForPoll) return;
+    // Fire immediately so the lobby doesn't sit idle the first 4 seconds
+    fetch(`/api/lobbies/${id}/bot-tick`, { method: "POST" }).catch(() => {});
+    fetch(`/api/cron/crash-tick`).catch(() => {});
     const t = setInterval(() => {
       fetch(`/api/lobbies/${id}/bot-tick`, { method: "POST" }).catch(() => {});
+      fetch(`/api/cron/crash-tick`).catch(() => {});
     }, 4000);
     return () => clearInterval(t);
   }, [id, lobbyStatus, inCountdownForPoll]);

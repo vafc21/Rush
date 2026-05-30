@@ -1,11 +1,13 @@
 "use client";
 import { useState } from "react";
+import { CrashGame } from "./CrashGame";
 import { DiceGame } from "./DiceGame";
 import { MinesGame } from "./MinesGame";
 
-type Tab = "dice" | "mines";
+type Tab = "crash" | "dice" | "mines";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "crash", label: "Crash", icon: "🚀" },
   { id: "dice", label: "Dice", icon: "🎲" },
   { id: "mines", label: "Mines", icon: "💣" },
 ];
@@ -17,7 +19,7 @@ export function GameTabs({
   lobbyId: string;
   balanceCents: number;
 }) {
-  const [active, setActive] = useState<Tab>("dice");
+  const [active, setActive] = useState<Tab>("crash");
 
   return (
     <div className="space-y-3">
@@ -40,6 +42,9 @@ export function GameTabs({
           );
         })}
       </div>
+      {active === "crash" && (
+        <CrashGame lobbyId={lobbyId} balanceCents={balanceCents} />
+      )}
       {active === "dice" && (
         <DiceGame lobbyId={lobbyId} balanceCents={balanceCents} />
       )}

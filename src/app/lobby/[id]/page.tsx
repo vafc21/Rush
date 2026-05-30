@@ -5,7 +5,7 @@ import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/Button";
 import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
 import { GameTabs } from "@/components/GameTabs";
-import { LastChanceWheel } from "@/components/LastChanceWheel";
+import { LastChanceZone } from "@/components/LastChanceZone";
 import { EndOfRoundGraph } from "@/components/EndOfRoundGraph";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
@@ -216,7 +216,7 @@ export default function LobbyPage() {
           )}
           {snapshot.lobby.status === "active" && !inCountdown && self && (
             self.is_busted ? (
-              <LastChanceWheel lobbyId={id!} />
+              <LastChanceZone lobbyId={id!} />
             ) : (
               <GameTabs lobbyId={id!} balanceCents={self.balance_cents} />
             )

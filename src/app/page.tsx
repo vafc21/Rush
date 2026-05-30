@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 
@@ -38,8 +39,26 @@ export default function Landing() {
         Beat your friends at fake-money casino games. $1,000 each, X minutes,
         highest balance wins.
       </p>
-      <div className="flex flex-col gap-3">
-        <Button onClick={() => setOpen(true)}>Play as Guest</Button>
+      <div className="flex w-full max-w-xs flex-col gap-3">
+        <Link
+          href="/sign-in"
+          className="rounded-md bg-accent px-4 py-2 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98]"
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          className="rounded-md bg-brand px-4 py-2 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98]"
+        >
+          Create account
+        </Link>
+        <Button
+          variant="secondary"
+          onClick={() => setOpen(true)}
+          className="w-full"
+        >
+          Play as Guest
+        </Button>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Pick a nickname">

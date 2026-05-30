@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
@@ -21,6 +21,20 @@ export default function Hub() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [me, setMe] = useState<{ kind: "guest" | "user"; nickname: string } | null>(
+    null
+  );
+
+  useEffect(() => {
+    fetch("/api/auth/whoami").then(async (r) => {
+      if (r.ok) setMe(await r.json());
+    });
+  }, []);
+
+  async function signOut() {
+    await fetch("/api/auth/signout", { method: "POST" }).catch(() => {});
+    router.replace("/");
+  }
 
   async function createLobby() {
     setBusy(true);
@@ -60,6 +74,28 @@ export default function Hub() {
     <>
       <TopBar />
       <main className="mx-auto flex max-w-md flex-col gap-4 p-6">
+        {me && (
+          <div className="flex items-center justify-between rounded-md bg-panel px-3 py-2 text-sm">
+            <span className="text-secondary">
+              {me.kind === "user" ? "Signed in as " : "Playing as guest: "}
+              <span
+                className={
+                  me.kind === "user"
+                    ? "font-bold text-brand"
+                    : "font-semibold text-white"
+                }
+              >
+                {me.nickname}
+              </span>
+            </span>
+            <button
+              onClick={signOut}
+              className="text-xs font-semibold text-muted transition hover:text-white"
+            >
+              {me.kind === "user" ? "Sign out" : "Exit"}
+            </button>
+          </div>
+        )}
         <h1 className="text-xl font-bold">Play</h1>
         <Button onClick={() => setCreateOpen(true)}>Create Lobby</Button>
         <Button variant="secondary" onClick={() => setJoinOpen(true)}>

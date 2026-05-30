@@ -7,6 +7,12 @@ export type GameType =
   | "plinko"
   | "keno"
   | "hilo"
+  | "roulette"
+  | "blackjack"
+  | "baccarat"
+  | "wheel"
+  | "slots"
+  | "diamonds"
   | "last_chance_mines"
   | "last_chance_wheel"
   | "flappy";

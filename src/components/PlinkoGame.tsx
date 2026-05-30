@@ -23,14 +23,14 @@ const PEG_SPACING_X = W / (ROWS + 2);            // horizontal peg spacing
 const PEG_SPACING_Y = PEG_SPACING_X * 1.05;      // vertical between rows
 const PEG_R = 1.8;
 const BALL_R = 4.2;
-const GRAVITY = 900;                             // units / s^2 — tuned so a full fall takes ~2.5s
+const GRAVITY = 520;                             // units / s^2 — tuned so a full fall takes ~3s
 const SIDE_DAMP = 0.55;                          // wall bounce damp
-const PEG_DEFLECT_VX = 80;                       // horizontal speed kicked by peg
-const PEG_VY_KEEP = 0.55;                        // fraction of downward vy retained after peg hit (no reversal)
-const PEG_VY_MIN = 40;                           // floor on post-peg downward vy so ball keeps moving
-const SPAWN_VY = 80;                             // initial downward speed (so ball moves immediately)
+const PEG_DEFLECT_VX = 65;                       // horizontal speed kicked by peg
+const PEG_VY_KEEP = 0.45;                        // fraction of downward vy retained after peg hit (no reversal)
+const PEG_VY_MIN = 25;                           // floor on post-peg downward vy so ball keeps moving
+const SPAWN_VY = 40;                             // initial downward speed (so ball moves immediately)
 const SLOT_FLOOR_Y = TOP_PAD + (ROWS + 1) * PEG_SPACING_Y + 6;
-const SETTLE_VY = 8;                             // when |vy| drops below this near floor, settle
+const SETTLE_VY = 6;                             // when |vy| drops below this near floor, settle
 
 const RISK_LABELS: Record<Risk, string> = {
   low: "Low",

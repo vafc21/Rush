@@ -129,16 +129,47 @@ export function CrashGame({
   // rounds every minute; locally we poll the same endpoint every 2 seconds
   // whenever we're not in an active round phase. The endpoint is
   // idempotent so re-firing is safe.
+  //
+  // We also hydrate the *current* round from the server here: Pusher
+  // doesn't replay history, so opening Crash mid-round would otherwise
+  // wait an entire round cycle to see one. /current returns the live
+  // round (or null) and we promote it to local state if we don't have it.
   const idleForCrash =
     phase === "waiting" || phase === "aftermath";
   useEffect(() => {
     if (!idleForCrash) return;
-    fetch("/api/cron/crash-tick").catch(() => {});
-    const id = setInterval(() => {
-      fetch("/api/cron/crash-tick").catch(() => {});
-    }, 2000);
-    return () => clearInterval(id);
-  }, [idleForCrash]);
+    let cancelled = false;
+    const hydrate = async () => {
+      try {
+        await fetch("/api/cron/crash-tick");
+        const res = await fetch(
+          `/api/games/crash/current?lobbyId=${lobbyId}`
+        );
+        if (cancelled || !res.ok) return;
+        const data = (await res.json()) as {
+          round: { id: string; startAtMs: number; crashAt: number } | null;
+        };
+        if (data.round) {
+          setRound((r) => {
+            if (r && r.id === data.round!.id) return r;
+            // New round id — clear any stale bet/error so the player can
+            // bet fresh (no bet they could have placed before mount).
+            setMyBet(null);
+            setError(null);
+            return data.round!;
+          });
+        }
+      } catch {
+        /* ignore — next tick will retry */
+      }
+    };
+    hydrate(); // immediate
+    const id = setInterval(hydrate, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [idleForCrash, lobbyId]);
 
   // Countdown shown during betting window
   const secondsToStart = round

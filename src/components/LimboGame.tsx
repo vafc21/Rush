@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 
 const SUSPENSE_MS = 900;
@@ -122,7 +123,7 @@ export function LimboGame({
 
       {/* Big multiplier display */}
       <div
-        className={`flex h-32 items-center justify-center rounded-md border border-bg transition-all ${
+        className={`relative flex h-32 items-center justify-center rounded-md border border-bg transition-all ${
           phase === "settled"
             ? last?.won
               ? "ring-2 ring-accent shadow-[0_0_24px_rgba(0,231,1,0.35)]"
@@ -130,6 +131,10 @@ export function LimboGame({
             : ""
         }`}
       >
+        <WinBurst
+          trigger={last && last.won ? `${phase}-${last.targetMultiplier}-${last.rolledCrashPoint}` : false}
+          intensity={last && last.won && last.targetMultiplier >= 5 ? 1.8 : 1}
+        />
         <div
           className={`text-6xl font-black tabular-nums transition-colors ${numberColor}`}
           style={{

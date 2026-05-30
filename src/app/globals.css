@@ -32,6 +32,17 @@ html, body {
   to { opacity: 0.75; }
 }
 
+@keyframes rush-flip {
+  0%   { transform: rotateY(0deg);  }
+  50%  { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg);  }
+}
+
+@keyframes rush-reel-spin {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+
 @keyframes rush-pop {
   0% {
     transform: scale(0.6);

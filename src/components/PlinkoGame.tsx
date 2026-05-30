@@ -1,10 +1,34 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
-import { multiplierTable, ROWS, SLOTS, Risk } from "@/lib/games/plinko";
+import { multiplierTable, ROWS, Risk } from "@/lib/games/plinko";
 
-const STEP_MS = 70;
+/**
+ * Plinko with real per-frame physics. Each ball is a body with position
+ * and velocity. Gravity pulls it down; when it intersects its "next"
+ * peg, we apply a deflection impulse in the direction the server told
+ * us (the path bit). Side walls bounce. After the last peg row, the
+ * ball settles into its target slot with a short squish-bounce.
+ *
+ * Layout: row r (0..ROWS-1) has (r+1) pegs centered. Bottom row has
+ * ROWS pegs, giving ROWS+1 slots at the floor.
+ */
+
+// World units (SVG viewBox coords). 320 wide / 380 tall fits 16 peg rows.
+const W = 320;
+const H = 400;
+const TOP_PAD = 16;
+const PEG_SPACING_X = W / (ROWS + 2);            // horizontal peg spacing
+const PEG_SPACING_Y = PEG_SPACING_X * 1.05;      // vertical between rows
+const PEG_R = 1.8;
+const BALL_R = 4.2;
+const GRAVITY = 60;                              // units / s^2  (high gravity for snappy feel)
+const SIDE_DAMP = 0.65;                          // wall bounce damp
+const PEG_DEFLECT_VX = 32;                       // horizontal speed kicked by peg
+const PEG_DEFLECT_VY = -10;                      // small upward bounce
+const SLOT_FLOOR_Y = TOP_PAD + (ROWS + 1) * PEG_SPACING_Y + 6;
+const SETTLE_VY = 1;                             // when |vy| drops below this near floor, settle
 
 const RISK_LABELS: Record<Risk, string> = {
   low: "Low",
@@ -12,14 +36,35 @@ const RISK_LABELS: Record<Risk, string> = {
   high: "High",
 };
 
-type ActiveDrop = {
+type Ball = {
   id: number;
-  path: boolean[];
-  slot: number;
-  step: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  path: boolean[];      // L (false) / R (true) per row, from server
+  nextRow: number;      // 0..ROWS, the next peg row the ball still needs to deflect off
+  slot: number;         // 0..ROWS (final landing slot)
+  settledAtMs: number | null;
   multiplier: number;
   betCents: number;
 };
+
+function pegPos(row: number, col: number): { x: number; y: number } {
+  // row 0 has 1 peg, row r has r+1 pegs
+  return {
+    x: W / 2 + (col - row / 2) * PEG_SPACING_X,
+    y: TOP_PAD + (row + 1) * PEG_SPACING_Y,
+  };
+}
+
+function slotCenterX(slot: number): number {
+  // Slot s sits between the bottom-row peg (s-1) and peg s; the s-th slot
+  // (0..ROWS) is therefore centered at the gap right of peg s in the
+  // ROWS-1 row layout.
+  const row = ROWS - 1;
+  return W / 2 + (slot - (row + 1) / 2 + 0.5) * PEG_SPACING_X;
+}
 
 export function PlinkoGame({
   lobbyId,
@@ -32,38 +77,121 @@ export function PlinkoGame({
   const [risk, setRisk] = useState<Risk>("medium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [drops, setDrops] = useState<ActiveDrop[]>([]);
   const [lastBank, setLastBank] = useState<{
     multiplier: number;
     slot: number;
     payoutCents: number;
     betCents: number;
   } | null>(null);
+
+  // Mutable simulation state. We don't put balls in setState — they
+  // update per-frame and we trigger a render with a tick counter.
+  const ballsRef = useRef<Ball[]>([]);
+  const slotFlashRef = useRef<Map<number, number>>(new Map());
   const idRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const [, setTick] = useState(0);
 
   const table = multiplierTable(risk);
 
-  // Animate each drop's step counter
+  // Per-frame physics loop. Runs always; cheap when no balls in flight.
   useEffect(() => {
-    if (drops.length === 0) return;
-    const t = setInterval(() => {
-      setDrops((ds) =>
-        ds
-          .map((d) => ({ ...d, step: d.step + 1 }))
-          .filter((d) => d.step <= ROWS + 4) // hold a few frames at the slot
-      );
-    }, STEP_MS);
-    return () => clearInterval(t);
-  }, [drops.length]);
+    let raf = 0;
+    const loop = (t: number) => {
+      const last = lastTimeRef.current ?? t;
+      const dtMs = Math.min(40, t - last); // clamp to 40ms to avoid huge jumps after a tab pause
+      lastTimeRef.current = t;
+      const dt = dtMs / 1000;
 
-  async function drop() {
+      const balls = ballsRef.current;
+      for (const b of balls) {
+        if (b.settledAtMs !== null) continue;
+        // Integrate
+        b.vy += GRAVITY * dt;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        // Slight air drag on horizontal velocity
+        b.vx *= Math.pow(0.9, dt);
+
+        // Side walls
+        if (b.x < BALL_R) {
+          b.x = BALL_R;
+          b.vx = Math.abs(b.vx) * SIDE_DAMP;
+        }
+        if (b.x > W - BALL_R) {
+          b.x = W - BALL_R;
+          b.vx = -Math.abs(b.vx) * SIDE_DAMP;
+        }
+
+        // Try to collide with the next peg the ball is destined for
+        if (b.nextRow < ROWS) {
+          const rightsSoFar = b.path
+            .slice(0, b.nextRow)
+            .filter(Boolean).length;
+          const peg = pegPos(b.nextRow, rightsSoFar);
+          const dx = b.x - peg.x;
+          const dy = b.y - peg.y;
+          const distSq = dx * dx + dy * dy;
+          const r = BALL_R + PEG_R;
+          if (distSq < r * r && b.y > peg.y - r * 0.8) {
+            // Deflect according to the predetermined path
+            const goRight = b.path[b.nextRow];
+            const dir = goRight ? 1 : -1;
+            b.x = peg.x + dir * r * 0.95;
+            b.y = peg.y + r * 0.4;
+            b.vx = dir * PEG_DEFLECT_VX;
+            b.vy = PEG_DEFLECT_VY + Math.random() * 4;
+            b.nextRow++;
+          }
+        }
+
+        // After the last peg, gravitate toward the target slot
+        if (b.nextRow >= ROWS) {
+          const targetX = slotCenterX(b.slot);
+          b.vx += (targetX - b.x) * 6 * dt; // gentle horizontal pull
+          // Floor + settle
+          if (b.y >= SLOT_FLOOR_Y - BALL_R) {
+            b.y = SLOT_FLOOR_Y - BALL_R;
+            b.vy = -Math.abs(b.vy) * 0.35; // bounce
+            b.vx *= 0.5;
+            if (Math.abs(b.vy) < SETTLE_VY && Math.abs(b.vx) < SETTLE_VY) {
+              b.settledAtMs = t;
+              b.x = targetX;
+              // Light the slot
+              slotFlashRef.current.set(b.slot, t);
+            }
+          }
+        }
+      }
+
+      // Drop balls that have been settled for > 1.2s
+      const before = ballsRef.current.length;
+      ballsRef.current = ballsRef.current.filter(
+        (b) => b.settledAtMs === null || t - b.settledAtMs < 1200
+      );
+      // Drop expired slot flashes
+      const flash = slotFlashRef.current;
+      for (const [k, v] of flash) if (t - v > 900) flash.delete(k);
+
+      // Force re-render at ~60fps (only when there's something animating
+      // or stale flashes still need to clear).
+      if (ballsRef.current.length > 0 || flash.size > 0 || before > 0) {
+        setTick((n) => (n + 1) % 1_000_000);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const drop = useCallback(async () => {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
       return;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per drop`);
+      setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
       return;
     }
     if (betCents > balanceCents) {
@@ -89,25 +217,40 @@ export function PlinkoGame({
       multiplier: number;
       payoutCents: number;
     };
+    // Spawn the ball at top center with small random horizontal jitter
     const id = ++idRef.current;
-    setDrops((ds) => [
-      ...ds,
-      {
-        id,
-        path: data.path,
-        slot: data.slot,
-        step: 0,
-        multiplier: data.multiplier,
-        betCents,
-      },
-    ]);
+    ballsRef.current.push({
+      id,
+      x: W / 2 + (Math.random() - 0.5) * 1.5,
+      y: 0,
+      vx: (Math.random() - 0.5) * 4,
+      vy: 0,
+      path: data.path,
+      nextRow: 0,
+      slot: data.slot,
+      settledAtMs: null,
+      multiplier: data.multiplier,
+      betCents,
+    });
     setLastBank({
       multiplier: data.multiplier,
       slot: data.slot,
       payoutCents: data.payoutCents,
       betCents,
     });
+  }, [betDollars, risk, lobbyId, balanceCents]);
+
+  // Color for slot multiplier
+  function slotColor(m: number) {
+    if (m >= 10) return { bg: "#00E701", text: "#0F212E" };
+    if (m >= 2) return { bg: "#FFB800", text: "#0F212E" };
+    if (m >= 1) return { bg: "#1A2C38", text: "#B1BAD3" };
+    return { bg: "#0F212E", text: "#7B8BA8" };
   }
+
+  // Render pegs and current balls
+  const balls = ballsRef.current;
+  const flash = slotFlashRef.current;
 
   return (
     <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6">
@@ -120,9 +263,7 @@ export function PlinkoGame({
               onClick={() => setRisk(r)}
               disabled={busy}
               className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
-                risk === r
-                  ? "bg-accent text-bg"
-                  : "bg-bg text-muted hover:text-white"
+                risk === r ? "bg-accent text-bg" : "bg-bg text-muted hover:text-white"
               }`}
             >
               {RISK_LABELS[r]}
@@ -131,90 +272,100 @@ export function PlinkoGame({
         </div>
       </div>
 
-      {/* Pegs + falling balls */}
-      <div className="relative rounded-md bg-bg p-3" style={{ aspectRatio: `${SLOTS}/${ROWS + 2}` }}>
+      <div className="rounded-md bg-bg p-2">
         <svg
-          viewBox={`0 0 ${SLOTS * 10} ${(ROWS + 2) * 10}`}
-          className="h-full w-full"
-          preserveAspectRatio="none"
+          viewBox={`0 0 ${W} ${H}`}
+          className="block w-full"
+          preserveAspectRatio="xMidYMid meet"
+          style={{ aspectRatio: `${W}/${H}` }}
         >
-          {/* Peg grid: row r (0-indexed) has r+1 pegs centered on x */}
+          {/* Pegs */}
           {Array.from({ length: ROWS }, (_, r) =>
-            Array.from({ length: r + 1 }, (_, i) => {
-              const cx = SLOTS * 10 / 2 + (i - r / 2) * 10;
-              const cy = (r + 1) * 10;
+            Array.from({ length: r + 1 }, (_, c) => {
+              const p = pegPos(r, c);
               return (
                 <circle
-                  key={`p-${r}-${i}`}
-                  cx={cx}
-                  cy={cy}
-                  r={0.8}
-                  fill="#1A2C38"
+                  key={`p-${r}-${c}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={PEG_R}
+                  fill="#243846"
                 />
               );
             })
           )}
 
-          {/* Active balls */}
-          {drops.map((d) => {
-            // After step k (0..ROWS), the ball is between row k-1 and row k.
-            // Compute x by walking the path up to step k.
-            const k = Math.min(d.step, ROWS);
-            let rights = 0;
-            for (let i = 0; i < k; i++) if (d.path[i]) rights++;
-            const lefts = k - rights;
-            const x = SLOTS * 10 / 2 + (rights - lefts) / 2 * 10;
-            const y = k * 10 + 5;
+          {/* Slot floor markers */}
+          {table.map((m, slot) => {
+            const x = slotCenterX(slot);
+            const c = slotColor(m);
+            const isLit = flash.has(slot);
             return (
-              <circle
-                key={d.id}
-                cx={x}
-                cy={y}
-                r={1.6}
-                fill="#FFB800"
-                stroke="#0F212E"
-                strokeWidth={0.3}
-              />
+              <g key={`slot-${slot}`}>
+                <rect
+                  x={x - PEG_SPACING_X * 0.45}
+                  y={SLOT_FLOOR_Y}
+                  width={PEG_SPACING_X * 0.9}
+                  height={14}
+                  rx={3}
+                  fill={c.bg}
+                  opacity={isLit ? 1 : 0.75}
+                  style={{
+                    transition: "opacity 200ms",
+                    filter: isLit ? "drop-shadow(0 0 5px rgba(255,255,255,0.7))" : undefined,
+                  }}
+                />
+                <text
+                  x={x}
+                  y={SLOT_FLOOR_Y + 10}
+                  textAnchor="middle"
+                  fontSize={6}
+                  fontWeight="bold"
+                  fill={c.text}
+                >
+                  {m}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Balls */}
+          {balls.map((b) => {
+            const settled = b.settledAtMs !== null;
+            return (
+              <g key={b.id}>
+                <circle
+                  cx={b.x}
+                  cy={b.y}
+                  r={BALL_R}
+                  fill={settled ? "#FFB800" : "#FFB800"}
+                  stroke="#0F212E"
+                  strokeWidth={0.4}
+                  opacity={settled ? Math.max(0, 1 - (performance.now() - b.settledAtMs!) / 1000) : 1}
+                />
+                {/* Slight inner highlight */}
+                <circle
+                  cx={b.x - BALL_R * 0.35}
+                  cy={b.y - BALL_R * 0.35}
+                  r={BALL_R * 0.35}
+                  fill="rgba(255,255,255,0.4)"
+                  opacity={settled ? 0 : 1}
+                />
+              </g>
             );
           })}
         </svg>
       </div>
 
-      {/* Slots row with multipliers */}
-      <div className="flex gap-0.5">
-        {table.map((m, slot) => {
-          const isHit = drops.some((d) => d.step >= ROWS && d.slot === slot);
-          // color scale: low (≤1) muted, mid amber, high green
-          const color =
-            m >= 10
-              ? "bg-accent text-bg"
-              : m >= 2
-                ? "bg-brand/80 text-bg"
-                : m >= 1
-                  ? "bg-bg text-secondary"
-                  : "bg-bg/50 text-muted";
-          return (
-            <div
-              key={slot}
-              className={`flex flex-1 items-center justify-center rounded text-[10px] font-bold tabular-nums py-1 transition-all ${color} ${
-                isHit ? "ring-2 ring-white scale-105" : ""
-              }`}
-            >
-              {m}x
-            </div>
-          );
-        })}
-      </div>
-
       <div>
-        <div className="mb-1 flex items-baseline justify-between">
-          <p className="text-xs uppercase tracking-wider text-muted">Bet</p>
-          <p className="text-[10px] text-muted">
+        <div className="mb-1 flex justify-between text-xs text-muted">
+          <span>Bet</span>
+          <span className="text-[10px]">
             Max{" "}
             <span className="tabular-nums text-secondary">
               ${(MAX_BET_CENTS / 100).toFixed(0)}
             </span>
-          </p>
+          </span>
         </div>
         <div className="flex gap-2">
           <input

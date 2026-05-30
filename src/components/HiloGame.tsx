@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button } from "./Button";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card, Direction } from "@/lib/games/hilo";
 
@@ -25,11 +26,25 @@ function suitColor(suit: string) {
   return suit === "♥" || suit === "♦" ? "text-red-400" : "text-white";
 }
 
-function CardView({ card, size = "lg" }: { card: Card; size?: "lg" | "sm" }) {
+function CardView({
+  card,
+  size = "lg",
+  flipKey,
+}: {
+  card: Card;
+  size?: "lg" | "sm";
+  /** Change this to retrigger the flip animation when the card changes. */
+  flipKey?: string | number;
+}) {
   const dim = size === "lg" ? "h-32 w-24 text-4xl" : "h-16 w-12 text-xl";
   return (
     <div
+      key={flipKey}
       className={`flex flex-col items-center justify-center rounded-lg bg-bg p-2 font-black ${dim} border border-panel`}
+      style={{
+        animation: flipKey !== undefined ? "rush-flip 500ms ease-out" : undefined,
+        transformStyle: "preserve-3d",
+      }}
     >
       <span className={`tabular-nums ${suitColor(card.suit)}`}>
         {rankLabel(card.rank)}
@@ -226,11 +241,19 @@ export function HiloGame({
 
       {game && (
         <div className="space-y-4">
-          <div className="flex items-center justify-center gap-4">
-            <CardView card={game.currentCard} />
-            {game.lastDrawn && game.currentCard !== game.lastDrawn && (
-              <div className="text-muted">→</div>
-            )}
+          <div className="relative flex items-center justify-center gap-4">
+            <WinBurst
+              trigger={
+                game.status === "cashed"
+                  ? `cashed-${game.cashoutMultiplier}`
+                  : false
+              }
+              intensity={game.cashoutMultiplier >= 5 ? 1.8 : 1.1}
+            />
+            <CardView
+              card={game.currentCard}
+              flipKey={`${game.currentCard.rank}-${game.currentCard.suit}-${game.cashoutMultiplier}`}
+            />
           </div>
 
           {game.status === "playing" && (

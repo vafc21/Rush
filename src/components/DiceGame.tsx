@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 
 type LastRoll = {
@@ -164,7 +165,11 @@ export function DiceGame({
       </div>
 
       {/* The scale */}
-      <div className="space-y-2">
+      <div className="relative space-y-2">
+        <WinBurst
+          trigger={last && last.won ? `${phase}-${last.roll}` : false}
+          intensity={last && last.won && last.payoutCents > last.betCents * 3 ? 1.6 : 1}
+        />
         <div
           className={`relative h-24 overflow-hidden rounded-md border border-bg transition-all duration-300 ${
             flash === "win"

@@ -95,23 +95,25 @@ export function PlinkoGame({
   const table = multiplierTable(risk);
 
   // Per-frame physics loop. Runs always; cheap when no balls in flight.
+  // Uses fixed-timestep substepping (1/120s steps) so the simulation stays
+  // accurate even if RAF throttles in background tabs.
   useEffect(() => {
     let raf = 0;
-    const loop = (t: number) => {
-      const last = lastTimeRef.current ?? t;
-      const dtMs = Math.min(40, t - last); // clamp to 40ms to avoid huge jumps after a tab pause
-      lastTimeRef.current = t;
-      const dt = dtMs / 1000;
+    const STEP = 1 / 120; // physics substep (s)
+    const STEP_MS = STEP * 1000;
+    const MAX_FRAME_MS = 1500; // catch up at most 1.5s of real time per frame
+    const SNAP_AFTER_MS = 4000; // if frame gap exceeds this, snap ball to slot
 
+    function stepOnce(t: number) {
       const balls = ballsRef.current;
       for (const b of balls) {
         if (b.settledAtMs !== null) continue;
         // Integrate
-        b.vy += GRAVITY * dt;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
+        b.vy += GRAVITY * STEP;
+        b.x += b.vx * STEP;
+        b.y += b.vy * STEP;
         // Slight air drag on horizontal velocity
-        b.vx *= Math.pow(0.9, dt);
+        b.vx *= Math.pow(0.9, STEP);
 
         // Side walls
         if (b.x < BALL_R) {
@@ -134,7 +136,6 @@ export function PlinkoGame({
           const distSq = dx * dx + dy * dy;
           const r = BALL_R + PEG_R;
           if (distSq < r * r && b.y > peg.y - r * 0.8) {
-            // Deflect according to the predetermined path
             const goRight = b.path[b.nextRow];
             const dir = goRight ? 1 : -1;
             b.x = peg.x + dir * r * 0.95;
@@ -148,7 +149,7 @@ export function PlinkoGame({
         // After the last peg, gravitate toward the target slot
         if (b.nextRow >= ROWS) {
           const targetX = slotCenterX(b.slot);
-          b.vx += (targetX - b.x) * 6 * dt; // gentle horizontal pull
+          b.vx += (targetX - b.x) * 6 * STEP;
           // Floor + settle
           if (b.y >= SLOT_FLOOR_Y - BALL_R) {
             b.y = SLOT_FLOOR_Y - BALL_R;
@@ -157,9 +158,39 @@ export function PlinkoGame({
             if (Math.abs(b.vy) < SETTLE_VY && Math.abs(b.vx) < SETTLE_VY) {
               b.settledAtMs = t;
               b.x = targetX;
-              // Light the slot
               slotFlashRef.current.set(b.slot, t);
             }
+          }
+        }
+      }
+    }
+
+    const loop = (t: number) => {
+      const last = lastTimeRef.current ?? t;
+      // Catch up at most MAX_FRAME_MS — after that, just snap the ball
+      // home (handles tab returning from background after a long pause).
+      const realDt = t - last;
+      lastTimeRef.current = t;
+      const frameMs = Math.min(MAX_FRAME_MS, realDt);
+      let acc = frameMs;
+      while (acc > 0) {
+        stepOnce(t);
+        acc -= STEP_MS;
+      }
+
+      // If the frame gap is huge (e.g. user backgrounded the tab for
+      // several seconds), snap any in-flight balls straight to their
+      // target slot so they don't linger off-screen.
+      if (realDt > SNAP_AFTER_MS) {
+        for (const b of ballsRef.current) {
+          if (b.settledAtMs === null) {
+            b.x = slotCenterX(b.slot);
+            b.y = SLOT_FLOOR_Y - BALL_R;
+            b.vx = 0;
+            b.vy = 0;
+            b.nextRow = ROWS;
+            b.settledAtMs = t;
+            slotFlashRef.current.set(b.slot, t);
           }
         }
       }
@@ -173,8 +204,7 @@ export function PlinkoGame({
       const flash = slotFlashRef.current;
       for (const [k, v] of flash) if (t - v > 900) flash.delete(k);
 
-      // Force re-render at ~60fps (only when there's something animating
-      // or stale flashes still need to clear).
+      // Force re-render only when something is animating
       if (ballsRef.current.length > 0 || flash.size > 0 || before > 0) {
         setTick((n) => (n + 1) % 1_000_000);
       }

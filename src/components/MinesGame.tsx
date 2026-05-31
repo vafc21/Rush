@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "./Button";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { MIN_MINES, MAX_MINES, MINES_TILES } from "@/lib/games/mines";
 
@@ -12,8 +13,30 @@ import { MIN_MINES, MAX_MINES, MINES_TILES } from "@/lib/games/mines";
  *  - mine:                 a mine — shown red after the game ends
  *  - locked:               game over, this tile was unrevealed (used during
  *                          a brief intermediate state; rarely hit in practice)
+ *
+ * Auto mode: between rounds, clicks toggle a "pre-selected" marker on tiles
+ * (yellow ring). The AutoBet loop then starts a round, reveals each
+ * pre-selected tile in sequence, and cashes out if they're all safe.
  */
 type TileState = "hidden" | "safe-clicked" | "safe-missed" | "mine" | "locked";
+type Mode = "manual" | "auto";
+
+type StartResponse = {
+  betId: string;
+  minesCount: number;
+  multiplierAtFirstClick: number;
+};
+type RevealResponse = {
+  exploded: boolean;
+  revealed: number[];
+  multiplier: number;
+  minePositions?: number[];
+};
+type CashoutResponse = {
+  payoutCents: number;
+  multiplier: number;
+  minePositions: number[];
+};
 
 type Game = {
   betId: string;
@@ -24,6 +47,9 @@ type Game = {
   status: "playing" | "exploded" | "cashed";
   minePositions?: number[];
 };
+
+const REVEAL_DELAY_MS = 130;
+const ROUND_END_DELAY_MS = 700;
 
 export function MinesGame({
   lobbyId,
@@ -38,47 +64,88 @@ export function MinesGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastPayout, setLastPayout] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>("manual");
+  const [preselected, setPreselected] = useState<Set<number>>(new Set());
+  // Track whether the auto loop is the source of the in-flight bet so
+  // we don't show the "busy" gate on manual buttons during auto runs.
+  const autoActiveRef = useRef(false);
 
-  async function start() {
-    const betCents = Math.round(parseFloat(betDollars || "0") * 100);
-    if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
-    }
-    if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per game`);
-      return;
-    }
-    if (betCents > balanceCents) {
-      setError("Insufficient balance");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setLastPayout(null);
-
+  // ── Pure API helpers (no state, callable from anywhere) ──
+  async function apiStart(betCents: number): Promise<StartResponse | { error: string }> {
     const res = await fetch("/api/games/mines/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lobbyId, betCents, minesCount }),
     });
-    setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "could not start");
+      return { error: body.error ?? "could not start" };
+    }
+    return (await res.json()) as StartResponse;
+  }
+
+  async function apiReveal(betId: string, tileIndex: number): Promise<RevealResponse | { error: string }> {
+    const res = await fetch("/api/games/mines/reveal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ betId, tileIndex }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { error: body.error ?? "reveal failed" };
+    }
+    return (await res.json()) as RevealResponse;
+  }
+
+  async function apiCashout(betId: string): Promise<CashoutResponse | { error: string }> {
+    const res = await fetch("/api/games/mines/cashout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ betId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { error: body.error ?? "cashout failed" };
+    }
+    return (await res.json()) as CashoutResponse;
+  }
+
+  function validateBet(): { ok: true; betCents: number } | { ok: false; error: string } {
+    const betCents = Math.round(parseFloat(betDollars || "0") * 100);
+    if (!betCents || betCents < MIN_BET_CENTS) {
+      return { ok: false, error: `Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}` };
+    }
+    if (betCents > MAX_BET_CENTS) {
+      return { ok: false, error: `Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per game` };
+    }
+    if (betCents > balanceCents) {
+      return { ok: false, error: "Insufficient balance" };
+    }
+    return { ok: true, betCents };
+  }
+
+  // ── Manual play handlers ──
+  async function start() {
+    const v = validateBet();
+    if (!v.ok) {
+      setError(v.error);
       return;
     }
-    const data = (await res.json()) as {
-      betId: string;
-      minesCount: number;
-      multiplierAtFirstClick: number;
-    };
+    setBusy(true);
+    setError(null);
+    setLastPayout(null);
+    const data = await apiStart(v.betCents);
+    setBusy(false);
+    if ("error" in data) {
+      setError(data.error);
+      return;
+    }
     setGame({
       betId: data.betId,
-      betCents,
+      betCents: v.betCents,
       minesCount: data.minesCount,
       revealed: new Set(),
-      multiplier: 1, // no winnings until first click
+      multiplier: 1,
       status: "playing",
     });
   }
@@ -87,34 +154,23 @@ export function MinesGame({
     if (!game || game.status !== "playing" || busy) return;
     if (game.revealed.has(tileIndex)) return;
     setBusy(true);
-
-    const res = await fetch("/api/games/mines/reveal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ betId: game.betId, tileIndex }),
-    });
+    const result = await apiReveal(game.betId, tileIndex);
     setBusy(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "reveal failed");
+    if ("error" in result) {
+      setError(result.error);
       return;
     }
-    const result = (await res.json()) as {
-      exploded: boolean;
-      revealed: number[];
-      multiplier: number;
-      minePositions?: number[];
-    };
-    setGame((g) => {
-      if (!g) return g;
-      return {
-        ...g,
-        revealed: new Set(result.revealed),
-        multiplier: result.multiplier,
-        status: result.exploded ? "exploded" : "playing",
-        minePositions: result.minePositions,
-      };
-    });
+    setGame((g) =>
+      g
+        ? {
+            ...g,
+            revealed: new Set(result.revealed),
+            multiplier: result.multiplier,
+            status: result.exploded ? "exploded" : "playing",
+            minePositions: result.minePositions,
+          }
+        : g
+    );
   }
 
   async function cashout() {
@@ -122,22 +178,12 @@ export function MinesGame({
       return;
     }
     setBusy(true);
-    const res = await fetch("/api/games/mines/cashout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ betId: game.betId }),
-    });
+    const data = await apiCashout(game.betId);
     setBusy(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "cashout failed");
+    if ("error" in data) {
+      setError(data.error);
       return;
     }
-    const data = (await res.json()) as {
-      payoutCents: number;
-      multiplier: number;
-      minePositions: number[];
-    };
     setLastPayout(data.payoutCents);
     setGame((g) =>
       g
@@ -152,13 +198,95 @@ export function MinesGame({
     setLastPayout(null);
   }
 
+  // ── Auto-bet orchestrator (one full round) ──
+  async function autoRound(): Promise<boolean> {
+    if (preselected.size === 0) {
+      setError("Pick tiles to reveal first (Auto mode)");
+      return false;
+    }
+    if (preselected.size + minesCount > MINES_TILES) {
+      setError("Too many pre-selected tiles — would leave no safe path");
+      return false;
+    }
+    const v = validateBet();
+    if (!v.ok) {
+      setError(v.error);
+      return false;
+    }
+    autoActiveRef.current = true;
+    setError(null);
+    setLastPayout(null);
+    // Start
+    const startData = await apiStart(v.betCents);
+    if ("error" in startData) {
+      setError(startData.error);
+      autoActiveRef.current = false;
+      return false;
+    }
+    const liveGame: Game = {
+      betId: startData.betId,
+      betCents: v.betCents,
+      minesCount: startData.minesCount,
+      revealed: new Set(),
+      multiplier: 1,
+      status: "playing",
+    };
+    setGame(liveGame);
+
+    // Reveal each preselected tile in sequence
+    const tiles = [...preselected];
+    let exploded = false;
+    let finalMinePositions: number[] | undefined;
+    for (const i of tiles) {
+      await new Promise((r) => setTimeout(r, REVEAL_DELAY_MS));
+      const result = await apiReveal(liveGame.betId, i);
+      if ("error" in result) {
+        setError(result.error);
+        autoActiveRef.current = false;
+        return false;
+      }
+      liveGame.revealed = new Set(result.revealed);
+      liveGame.multiplier = result.multiplier;
+      liveGame.status = result.exploded ? "exploded" : "playing";
+      if (result.minePositions) finalMinePositions = result.minePositions;
+      setGame({ ...liveGame });
+      if (result.exploded) {
+        exploded = true;
+        break;
+      }
+    }
+
+    if (!exploded) {
+      // Cashout
+      const co = await apiCashout(liveGame.betId);
+      if ("error" in co) {
+        setError(co.error);
+        autoActiveRef.current = false;
+        return false;
+      }
+      setLastPayout(co.payoutCents);
+      setGame({
+        ...liveGame,
+        status: "cashed",
+        minePositions: co.minePositions,
+      });
+    } else if (finalMinePositions) {
+      setGame({ ...liveGame, minePositions: finalMinePositions });
+    }
+
+    // Brief pause so the user can see the outcome, then clear for next round
+    await new Promise((r) => setTimeout(r, ROUND_END_DELAY_MS));
+    setGame(null);
+    setLastPayout(null);
+    autoActiveRef.current = false;
+    return true;
+  }
+
   const gameOver = game?.status === "exploded" || game?.status === "cashed";
   const tiles: TileState[] = Array.from({ length: MINES_TILES }, (_, i) => {
     if (!game) return "hidden";
     if (game.revealed.has(i)) return "safe-clicked";
     if (game.minePositions?.includes(i)) return "mine";
-    // un-clicked, not a mine — show as a missed-safe if the game is over,
-    // otherwise it's a regular hidden tile the player can still click
     if (gameOver) return "safe-missed";
     return "hidden";
   });
@@ -167,28 +295,68 @@ export function MinesGame({
     ? Math.floor(game.betCents * game.multiplier)
     : 0;
 
+  const onTileClick = (i: number) => {
+    if (mode === "auto" && !game) {
+      // Pre-select / un-preselect for the auto loop
+      setPreselected((prev) => {
+        const next = new Set(prev);
+        if (next.has(i)) next.delete(i);
+        else next.add(i);
+        return next;
+      });
+      return;
+    }
+    reveal(i);
+  };
+
   return (
     <div className="w-full max-w-md space-y-5 rounded-lg bg-panel p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">💣 Mines</h2>
-        {game && (
-          <div className="text-xs text-muted">
-            Multi{" "}
-            <span className="font-bold tabular-nums text-accent">
-              {game.multiplier.toFixed(2)}x
-            </span>{" "}
-            ·{" "}
-            <span className="tabular-nums text-white">
-              ${(potentialPayout / 100).toFixed(2)}
-            </span>
+        <div className="flex items-center gap-3">
+          {game && (
+            <div className="text-xs text-muted">
+              Multi{" "}
+              <span className="font-bold tabular-nums text-accent">
+                {game.multiplier.toFixed(2)}x
+              </span>{" "}
+              ·{" "}
+              <span className="tabular-nums text-white">
+                ${(potentialPayout / 100).toFixed(2)}
+              </span>
+            </div>
+          )}
+          {/* Mode toggle */}
+          <div className="flex rounded-md bg-bg p-0.5 text-[10px] font-bold">
+            <button
+              onClick={() => setMode("manual")}
+              disabled={!!game}
+              className={`rounded px-2 py-1 transition ${
+                mode === "manual" ? "bg-accent text-bg" : "text-muted hover:text-white"
+              } disabled:opacity-40`}
+            >
+              MANUAL
+            </button>
+            <button
+              onClick={() => setMode("auto")}
+              disabled={!!game}
+              className={`rounded px-2 py-1 transition ${
+                mode === "auto" ? "bg-accent text-bg" : "text-muted hover:text-white"
+              } disabled:opacity-40`}
+            >
+              AUTO
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* 5x5 grid */}
       <div className="grid grid-cols-5 gap-2">
         {tiles.map((state, i) => {
-          const isClickable = state === "hidden" && game?.status === "playing";
+          const isPreselected = mode === "auto" && !game && preselected.has(i);
+          const isClickable =
+            (state === "hidden" && game?.status === "playing") ||
+            (mode === "auto" && !game);
           const classes =
             state === "hidden"
               ? isClickable
@@ -205,8 +373,10 @@ export function MinesGame({
             <button
               key={i}
               disabled={!isClickable}
-              onClick={() => reveal(i)}
-              className={`aspect-square rounded-md text-2xl font-bold transition-all duration-200 active:scale-95 ${classes}`}
+              onClick={() => onTileClick(i)}
+              className={`relative aspect-square rounded-md text-2xl font-bold transition-all duration-200 active:scale-95 ${classes} ${
+                isPreselected ? "ring-2 ring-brand" : ""
+              }`}
               style={
                 state !== "hidden"
                   ? { animation: "rush-pop 250ms ease-out" }
@@ -219,7 +389,9 @@ export function MinesGame({
                   ? "✓"
                   : state === "mine"
                     ? "💣"
-                    : ""}
+                    : isPreselected
+                      ? "•"
+                      : ""}
             </button>
           );
         })}
@@ -314,13 +486,24 @@ export function MinesGame({
             </div>
           </div>
 
-          <Button onClick={start} disabled={busy} className="w-full">
-            {busy ? "Starting…" : "Start Game"}
-          </Button>
+          {mode === "manual" ? (
+            <Button onClick={start} disabled={busy} className="w-full">
+              {busy ? "Starting…" : "Start Game"}
+            </Button>
+          ) : (
+            <>
+              <p className="text-center text-[11px] text-muted">
+                {preselected.size === 0
+                  ? "Click tiles to pre-select what Auto will reveal each round"
+                  : `${preselected.size} tile${preselected.size > 1 ? "s" : ""} selected — Auto will cash out if they're all safe`}
+              </p>
+              <AutoBet onPlay={autoRound} pauseMs={400} />
+            </>
+          )}
         </>
       )}
 
-      {/* In-game controls */}
+      {/* In-game controls (manual reveal/cashout) */}
       {game && game.status === "playing" && (
         <Button
           onClick={cashout}
@@ -340,12 +523,14 @@ export function MinesGame({
           <p className="text-sm text-red-300">
             Lost ${(game.betCents / 100).toFixed(2)}
           </p>
-          <button
-            onClick={reset}
-            className="text-xs font-semibold text-muted underline hover:text-white"
-          >
-            Play again
-          </button>
+          {!autoActiveRef.current && (
+            <button
+              onClick={reset}
+              className="text-xs font-semibold text-muted underline hover:text-white"
+            >
+              Play again
+            </button>
+          )}
         </div>
       )}
       {game?.status === "cashed" && lastPayout !== null && (
@@ -356,12 +541,14 @@ export function MinesGame({
           <p className="text-sm text-accent/80">
             Cashed at {game.multiplier.toFixed(2)}x
           </p>
-          <button
-            onClick={reset}
-            className="text-xs font-semibold text-muted underline hover:text-white"
-          >
-            Play again
-          </button>
+          {!autoActiveRef.current && (
+            <button
+              onClick={reset}
+              className="text-xs font-semibold text-muted underline hover:text-white"
+            >
+              Play again
+            </button>
+          )}
         </div>
       )}
 

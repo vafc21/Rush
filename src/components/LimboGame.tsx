@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 
 const SUSPENSE_MS = 900;
@@ -42,19 +43,19 @@ export function LimboGame({
     };
   }, []);
 
-  async function roll() {
+  async function roll(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per roll`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -93,13 +94,14 @@ export function LimboGame({
       setError(body.error ?? "roll failed");
       setBusy(false);
       setPhase("idle");
-      return;
+      return false;
     }
     const data = (await res.json()) as Omit<LastRoll, "betCents">;
     setDisplayMultiplier(data.rolledCrashPoint);
     setLast({ ...data, betCents });
     setPhase("settled");
     setBusy(false);
+    return true;
   }
 
   const shown = displayMultiplier ?? 1.0;
@@ -246,6 +248,7 @@ export function LimboGame({
       <Button onClick={roll} disabled={busy} className="w-full">
         {busy ? "Rolling…" : "Roll"}
       </Button>
+      <AutoBet onPlay={roll} pauseMs={200} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && !error && (

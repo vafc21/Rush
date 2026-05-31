@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button } from "./Button";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Gem } from "@/lib/games/diamonds";
 
@@ -24,19 +25,19 @@ export function DiamondsGame({
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<Result | null>(null);
 
-  async function play() {
+  async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -50,10 +51,11 @@ export function DiamondsGame({
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "deal failed");
-      return;
+      return false;
     }
     const data = await res.json();
     setLast({ ...data, betCents });
+    return true;
   }
 
   return (
@@ -107,6 +109,7 @@ export function DiamondsGame({
       <Button onClick={play} disabled={busy} className="w-full">
         {busy ? "Dealing…" : "Deal"}
       </Button>
+      <AutoBet onPlay={play} pauseMs={200} />
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && (
         <div

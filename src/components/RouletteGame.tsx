@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Bet, colorOf } from "@/lib/games/roulette";
 
@@ -57,7 +58,7 @@ export function RouletteGame({
     setError(null);
   }
 
-  async function spin() {
+  async function spin(): Promise<boolean> {
     if (bets.length === 0 || totalCents > MAX_BET_CENTS || totalCents > balanceCents) {
       setError(
         totalCents > balanceCents
@@ -66,7 +67,7 @@ export function RouletteGame({
             ? `Max total $${MAX_BET_CENTS / 100}`
             : "Place a bet first"
       );
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -84,7 +85,7 @@ export function RouletteGame({
       setBusy(false);
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "spin failed");
-      return;
+      return false;
     }
     const data = (await res.json()) as {
       n: number;
@@ -103,15 +104,19 @@ export function RouletteGame({
     setBallRotation((p) => p - 8 * 360 - ((p % 360) + 360) % 360);
 
     // Wait for the spin animation to mostly finish before showing the result
-    setTimeout(() => {
-      // Only apply if this is still the most recent spin
-      if (spinIdRef.current === thisSpinId) {
-        setResult({ ...data, netDelta: data.totalPayout - totalCents });
-        setSpinning(false);
-        setBusy(false);
-        setBets([]);
-      }
-    }, SPIN_DURATION_MS);
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        // Only apply if this is still the most recent spin
+        if (spinIdRef.current === thisSpinId) {
+          setResult({ ...data, netDelta: data.totalPayout - totalCents });
+          setSpinning(false);
+          setBusy(false);
+          setBets([]);
+        }
+        resolve();
+      }, SPIN_DURATION_MS);
+    });
+    return true;
   }
 
   const numbersRow1 = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36];
@@ -317,6 +322,7 @@ export function RouletteGame({
           {busy ? "Spinning…" : `Spin ($${(totalCents / 100).toFixed(2)})`}
         </Button>
       </div>
+      <AutoBet onPlay={spin} pauseMs={400} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>

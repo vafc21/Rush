@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 
 type LastRoll = {
@@ -55,19 +56,21 @@ export function DiceGame({
     };
   }, []);
 
-  async function roll() {
+  // Returns true if the roll completed (or was a recoverable error),
+  // false if AutoBet should stop (insufficient balance, hard validation).
+  async function roll(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per roll`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -110,7 +113,7 @@ export function DiceGame({
       setError(body.error ?? "Roll failed");
       setBusy(false);
       setPhase("idle");
-      return;
+      return false;
     }
 
     const result = (await res.json()) as Omit<LastRoll, "betCents">;
@@ -127,6 +130,7 @@ export function DiceGame({
 
     setTimeout(() => setFlash(null), SETTLE_MS);
     setTimeout(() => setShine(false), 1500);
+    return true;
   }
 
   const markerColor = !last
@@ -334,6 +338,7 @@ export function DiceGame({
       >
         {busy ? "Rolling…" : "Roll"}
       </Button>
+      <AutoBet onPlay={roll} pauseMs={250} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && !error && (

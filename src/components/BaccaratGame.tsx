@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button } from "./Button";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card } from "@/lib/games/baccarat";
 
@@ -48,19 +49,19 @@ export function BaccaratGame({
   const [error, setError] = useState<string | null>(null);
   const [hand, setHand] = useState<Hand | null>(null);
 
-  async function play() {
+  async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -74,10 +75,11 @@ export function BaccaratGame({
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "deal failed");
-      return;
+      return false;
     }
     const data = await res.json();
     setHand({ ...data, betCents, side });
+    return true;
   }
 
   return (
@@ -167,6 +169,7 @@ export function BaccaratGame({
       <Button onClick={play} disabled={busy} className="w-full">
         {busy ? "Dealing…" : `Deal on ${side}`}
       </Button>
+      <AutoBet onPlay={play} pauseMs={300} />
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );

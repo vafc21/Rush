@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button } from "./Button";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { segmentsFor, SEGMENTS, Risk } from "@/lib/games/wheel";
 
@@ -33,20 +34,20 @@ export function WheelGame({
 
   const segs = segmentsFor(risk);
 
-  async function play() {
-    if (spinning) return;
+  async function play(): Promise<boolean> {
+    if (spinning) return false;
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setSpinning(true);
     setError(null);
@@ -60,7 +61,7 @@ export function WheelGame({
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "spin failed");
       setSpinning(false);
-      return;
+      return false;
     }
     const data = (await res.json()) as {
       segment: number;
@@ -69,10 +70,14 @@ export function WheelGame({
     };
     const targetDeg = 8 * 360 + (360 - data.segment * SEG_DEG);
     setRotation((p) => p + targetDeg);
-    setTimeout(() => {
-      setSpinning(false);
-      setLast({ ...data, betCents });
-    }, SPIN_MS);
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setSpinning(false);
+        setLast({ ...data, betCents });
+        resolve();
+      }, SPIN_MS);
+    });
+    return true;
   }
 
   function color(m: number) {
@@ -183,6 +188,7 @@ export function WheelGame({
       <Button onClick={play} disabled={spinning} className="w-full">
         {spinning ? "Spinning…" : "Spin"}
       </Button>
+      <AutoBet onPlay={play} pauseMs={300} />
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && !spinning && (
         <div

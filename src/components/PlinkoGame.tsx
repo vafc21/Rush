@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { multiplierTable, ROWS, Risk } from "@/lib/games/plinko";
 
@@ -234,22 +235,22 @@ export function PlinkoGame({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const drop = useCallback(async () => {
+  const drop = useCallback(async (): Promise<boolean> => {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
-      return;
+      return false;
     }
     // Pessimistic balance check accounting for in-flight bets so a
     // rapid-fire player can't oversubscribe their balance and only
     // discover it when the server rejects.
     if (betCents + inFlightCentsRef.current > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setError(null);
     inFlightCentsRef.current += betCents;
@@ -263,13 +264,13 @@ export function PlinkoGame({
     } catch (e) {
       inFlightCentsRef.current -= betCents;
       setError("network error");
-      return;
+      return false;
     }
     inFlightCentsRef.current -= betCents;
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "drop failed");
-      return;
+      return false;
     }
     const data = (await res.json()) as {
       path: boolean[];
@@ -298,6 +299,7 @@ export function PlinkoGame({
       payoutCents: data.payoutCents,
       betCents,
     });
+    return true;
   }, [betDollars, risk, lobbyId, balanceCents]);
 
   // Color for slot multiplier
@@ -456,6 +458,7 @@ export function PlinkoGame({
       >
         Drop Ball{balls.length > 0 ? ` (${balls.length})` : ""}
       </Button>
+      <AutoBet onPlay={drop} pauseMs={100} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       {lastBank && !error && (

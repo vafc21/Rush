@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
+import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Symbol, SYMBOLS } from "@/lib/games/slots";
 
@@ -93,19 +94,19 @@ export function SlotsGame({
     };
   }, []);
 
-  async function spin() {
+  async function spin(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
       setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
-      return;
+      return false;
     }
     if (betCents > MAX_BET_CENTS) {
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
-      return;
+      return false;
     }
     if (betCents > balanceCents) {
       setError("Insufficient balance");
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -120,7 +121,7 @@ export function SlotsGame({
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "spin failed");
       setBusy(false);
-      return;
+      return false;
     }
     const data = (await res.json()) as {
       reels: [Symbol, Symbol, Symbol];
@@ -145,18 +146,22 @@ export function SlotsGame({
       }) as [ReelState, ReelState, ReelState]
     );
 
-    setTimeout(
-      () => {
-        setLast({
-          multiplier: data.multiplier,
-          payoutCents: data.payoutCents,
-          betCents,
-          reels: data.reels,
-        });
-        setBusy(false);
-      },
-      SPIN_DURATION_MS[2] + SETTLE_OVERSHOOT_MS + 60
-    );
+    await new Promise<void>((resolve) => {
+      setTimeout(
+        () => {
+          setLast({
+            multiplier: data.multiplier,
+            payoutCents: data.payoutCents,
+            betCents,
+            reels: data.reels,
+          });
+          setBusy(false);
+          resolve();
+        },
+        SPIN_DURATION_MS[2] + SETTLE_OVERSHOOT_MS + 60
+      );
+    });
+    return true;
   }
 
   function reelHighlight(reel: ReelState, idx: number) {
@@ -240,6 +245,7 @@ export function SlotsGame({
       <Button onClick={spin} disabled={busy} className="w-full">
         {busy ? "Spinning…" : "Spin"}
       </Button>
+      <AutoBet onPlay={spin} pauseMs={200} />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && !busy && (

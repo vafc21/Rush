@@ -6,11 +6,11 @@
     </linearGradient>
   </defs>
   <rect
-    x="6.5"
-    y="6.5"
-    width="19"
-    height="19"
-    rx="4"
+    x="5.25"
+    y="5.25"
+    width="21.5"
+    height="21.5"
+    rx="4.5"
     fill="url(#rush)"
     transform="rotate(45 16 16)"
   />

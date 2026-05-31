@@ -355,7 +355,10 @@ export function MinesGame({
         {tiles.map((state, i) => {
           const isPreselected = mode === "auto" && !game && preselected.has(i);
           const isClickable =
-            (state === "hidden" && game?.status === "playing") ||
+            // Manual play: reveal tiles during a live game
+            (mode === "manual" && state === "hidden" && game?.status === "playing") ||
+            // Auto setup: toggle pre-selections before a round starts.
+            // (During an auto round the loop drives reveals — no clicks.)
             (mode === "auto" && !game);
           const classes =
             state === "hidden"
@@ -491,20 +494,25 @@ export function MinesGame({
               {busy ? "Starting…" : "Start Game"}
             </Button>
           ) : (
-            <>
-              <p className="text-center text-[11px] text-muted">
-                {preselected.size === 0
-                  ? "Click tiles to pre-select what Auto will reveal each round"
-                  : `${preselected.size} tile${preselected.size > 1 ? "s" : ""} selected — Auto will cash out if they're all safe`}
-              </p>
-              <AutoBet onPlay={autoRound} pauseMs={400} />
-            </>
+            <p className="text-center text-[11px] text-muted">
+              {preselected.size === 0
+                ? "Click tiles to pre-select what Auto will reveal each round"
+                : `${preselected.size} tile${preselected.size > 1 ? "s" : ""} selected — Auto will cash out if they're all safe`}
+            </p>
           )}
         </>
       )}
 
-      {/* In-game controls (manual reveal/cashout) */}
-      {game && game.status === "playing" && (
+      {/* Auto-bet driver. Rendered OUTSIDE the {!game && ...} block so it
+          stays mounted while a round is in progress — otherwise the loop
+          would unmount the moment a game starts and stop after one round. */}
+      {mode === "auto" && (
+        <AutoBet onPlay={autoRound} pauseMs={400} />
+      )}
+
+      {/* In-game manual reveal/cashout — manual mode only (auto handles
+          its own cashout). */}
+      {mode === "manual" && game && game.status === "playing" && (
         <Button
           onClick={cashout}
           disabled={busy || game.revealed.size === 0}

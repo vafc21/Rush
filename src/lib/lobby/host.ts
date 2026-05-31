@@ -2,14 +2,31 @@ import type { SessionPayload } from "@/lib/auth/jwt";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Identifier we use to enforce per-lobby bans. Logged-in accounts ban
- * by user UUID; guests can only be banned by (lowercased) nickname.
- * Guests can trivially circumvent the latter by changing nickname —
- * that's accepted for this game.
+ * Key used to enforce per-lobby bans, matching the lobby_bans table
+ * columns (session_kind, session_id). Logged-in accounts ban by user
+ * UUID; guests ban by (lowercased) nickname — the only stable handle
+ * we have for a guest from their lobby_players row. Guests can trivially
+ * circumvent this by changing nickname; that's accepted for this game.
  */
-export function banIdentifierForSession(session: SessionPayload): string {
-  if (session.kind === "user") return `user:${session.userId}`;
-  return `nick:${session.nickname.toLowerCase()}`;
+export type BanKey = { session_kind: string; session_id: string };
+
+/** Ban key for the CURRENT caller's session (used at join time). */
+export function banKeyForSession(session: SessionPayload): BanKey {
+  if (session.kind === "user") {
+    return { session_kind: "user", session_id: session.userId };
+  }
+  return { session_kind: "guest", session_id: session.nickname.toLowerCase() };
+}
+
+/** Ban key for a TARGET lobby_players row (used at ban time). */
+export function banKeyForPlayer(player: {
+  user_id: string | null;
+  nickname: string;
+}): BanKey {
+  if (player.user_id) {
+    return { session_kind: "user", session_id: player.user_id };
+  }
+  return { session_kind: "guest", session_id: player.nickname.toLowerCase() };
 }
 
 /**

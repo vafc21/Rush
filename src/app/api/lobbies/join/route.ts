@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { isLobbyCode } from "@/lib/lobby/codes";
 import { publishLobby } from "@/lib/realtime/pusher-server";
-import { banIdentifierForSession } from "@/lib/lobby/host";
+import { banKeyForSession } from "@/lib/lobby/host";
 
 export async function POST(req: NextRequest) {
   let session;
@@ -34,12 +34,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Ban check — host kicked + banned them previously
-  const identifier = banIdentifierForSession(session);
+  const banKey = banKeyForSession(session);
   const { data: ban } = await supabase
     .from("lobby_bans")
     .select("id")
     .eq("lobby_id", lobby.id)
-    .eq("identifier", identifier)
+    .eq("session_kind", banKey.session_kind)
+    .eq("session_id", banKey.session_id)
     .maybeSingle();
   if (ban) {
     return NextResponse.json(

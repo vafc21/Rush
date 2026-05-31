@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
-import { getCallerPlayerId, getHostPlayerId } from "@/lib/lobby/host";
+import {
+  banKeyForPlayer,
+  getCallerPlayerId,
+  getHostPlayerId,
+} from "@/lib/lobby/host";
 
 /**
  * POST /api/lobbies/[id]/ban
@@ -68,14 +72,12 @@ export async function POST(
 
   // Record the ban (skip for bots — meaningless and they get new ids).
   if (!target.is_bot) {
-    const identifier = target.user_id
-      ? `user:${target.user_id}`
-      : `nick:${target.nickname.toLowerCase()}`;
+    const key = banKeyForPlayer(target);
     await supabase
       .from("lobby_bans")
       .upsert(
-        { lobby_id: lobbyId, identifier },
-        { onConflict: "lobby_id,identifier" }
+        { lobby_id: lobbyId, ...key },
+        { onConflict: "lobby_id,session_kind,session_id" }
       );
   }
 

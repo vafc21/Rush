@@ -10,8 +10,6 @@ import {
   paytableFor,
 } from "@/lib/games/keno";
 
-const COLS = 8; // 8x5 grid = 40 numbers
-
 type LastDraw = {
   drawn: number[];
   matched: number[];

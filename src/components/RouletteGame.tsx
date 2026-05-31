@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
 import { AutoBet } from "./AutoBet";
-import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
+import { MAX_BET_CENTS } from "@/lib/games/limits";
 import { Bet, colorOf } from "@/lib/games/roulette";
 
 type ChipBet = { bet: Bet; amountCents: number };

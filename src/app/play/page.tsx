@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
@@ -13,7 +13,15 @@ const DURATIONS = [
   { seconds: 900, label: "15 min" },
 ] as const;
 
-export default function Hub() {
+export default function HubPage() {
+  return (
+    <Suspense fallback={<TopBar />}>
+      <Hub />
+    </Suspense>
+  );
+}
+
+function Hub() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const wasKicked = searchParams.get("kicked") === "1";

@@ -261,7 +261,7 @@ export function PlinkoGame({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lobbyId, betCents, risk }),
       });
-    } catch (e) {
+    } catch {
       inFlightCentsRef.current -= betCents;
       setError("network error");
       return false;

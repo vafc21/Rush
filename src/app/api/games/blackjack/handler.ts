@@ -146,7 +146,7 @@ export async function performAction(input: ActionInput): Promise<ActionResult> {
   const details = bet.details as BlackjackDetails;
   if (details.status !== "player_turn") throw new Error("game not active");
 
-  let player = [...details.player];
+  const player = [...details.player];
   let doubled = details.doubled;
 
   if (input.action === "hit") {

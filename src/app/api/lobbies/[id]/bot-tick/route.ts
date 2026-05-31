@@ -243,7 +243,7 @@ export async function POST(
         betCents,
         exploded,
       });
-    } catch (e) {
+    } catch {
       // Fall through to Dice on any error
       chosenGame = "dice";
     }

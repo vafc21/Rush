@@ -283,6 +283,36 @@ function Waiting({
   const [busy, setBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+
+  const joinLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/join/${snapshot.lobby.code}`
+      : "";
+
+  async function copy(kind: "code" | "link") {
+    const text = kind === "code" ? snapshot.lobby.code : joinLink;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API can fail (insecure context / denied). Fall back
+      // to a temporary textarea + execCommand.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* give up silently */
+      }
+      document.body.removeChild(ta);
+    }
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1500);
+  }
 
   async function start() {
     setBusy(true);
@@ -344,12 +374,34 @@ function Waiting({
   return (
     <div className="rounded-lg bg-panel p-6">
       <h2 className="mb-2 text-xl font-bold">Waiting Room</h2>
-      <p className="mb-4 text-secondary">
-        Share this code:{" "}
-        <span className="font-mono text-2xl text-brand">
-          {snapshot.lobby.code}
-        </span>
-      </p>
+
+      {/* Invite: friends can use the code, or click a one-tap join link */}
+      <div className="mb-4 rounded-md bg-bg/40 p-3">
+        <p className="text-xs uppercase tracking-wider text-muted">Invite</p>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="font-mono text-2xl tracking-widest text-brand">
+            {snapshot.lobby.code}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => copy("code")}
+              className="rounded-md bg-bg px-3 py-1.5 text-xs font-semibold text-secondary transition hover:bg-bg/70 active:scale-95"
+            >
+              {copied === "code" ? "Copied!" : "Copy code"}
+            </button>
+            <button
+              onClick={() => copy("link")}
+              className="rounded-md bg-brand/15 px-3 py-1.5 text-xs font-bold text-brand transition hover:bg-brand/25 active:scale-95"
+            >
+              {copied === "link" ? "Copied!" : "Copy link"}
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 truncate text-[11px] text-muted" title={joinLink}>
+          {joinLink}
+        </p>
+      </div>
+
       <p className="mb-1 text-xs uppercase tracking-wider text-muted">
         Seated ({snapshot.players.length})
       </p>

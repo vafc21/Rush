@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import { AnimatedAmount } from "./AnimatedAmount";
 
@@ -5,10 +6,14 @@ export function TopBar({
   balanceCents,
   roundSecondsLeft,
   showLeave = false,
+  onLeave,
 }: {
   balanceCents?: number;
   roundSecondsLeft?: number;
   showLeave?: boolean;
+  /** If provided, the Leave control runs this instead of a plain link
+   *  (used by the lobby page to free the seat before navigating). */
+  onLeave?: () => void;
 }) {
   const lowTime =
     roundSecondsLeft !== undefined && roundSecondsLeft <= 30 && roundSecondsLeft > 0;
@@ -39,15 +44,23 @@ export function TopBar({
             className="rounded-md bg-panel px-3 py-1 font-semibold text-accent"
           />
         )}
-        {showLeave && (
-          <Link
-            href="/play"
-            replace
-            className="rounded-md bg-panel px-3 py-1 text-xs text-muted transition hover:text-white"
-          >
-            Leave
-          </Link>
-        )}
+        {showLeave &&
+          (onLeave ? (
+            <button
+              onClick={onLeave}
+              className="rounded-md bg-panel px-3 py-1 text-xs text-muted transition hover:text-white"
+            >
+              Leave
+            </button>
+          ) : (
+            <Link
+              href="/play"
+              replace
+              className="rounded-md bg-panel px-3 py-1 text-xs text-muted transition hover:text-white"
+            >
+              Leave
+            </Link>
+          ))}
       </div>
     </header>
   );

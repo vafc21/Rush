@@ -231,14 +231,26 @@ export default function LobbyPage() {
     endsAt ? Math.max(0, Math.floor((endsAt - nowMs) / 1000)) : undefined;
   const inCountdown = startsAt !== null && nowMs < startsAt;
 
+  async function handleLeave() {
+    // Free the seat (only acts while waiting; harmless otherwise) so the
+    // host role hands off to the next player, then head to the hub.
+    try {
+      await fetch(`/api/lobbies/${id}/leave`, { method: "POST" });
+    } catch {
+      /* navigate anyway */
+    }
+    router.replace("/play");
+  }
+
   return (
     <>
       <TopBar
         balanceCents={self?.balance_cents}
         roundSecondsLeft={secondsLeft}
         showLeave
+        onLeave={handleLeave}
       />
-      <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6 md:flex-row">
+      <main className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:gap-6 sm:p-6 md:flex-row">
         <div className="flex-1">
           {snapshot.lobby.status === "waiting" && (
             <Waiting snapshot={snapshot} selfNickname={selfNickname} />

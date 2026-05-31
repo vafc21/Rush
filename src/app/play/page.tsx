@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { TopBar } from "@/components/TopBar";
+import { Footer } from "@/components/Footer";
 
 const SIZES = [4, 8, 16] as const;
 const DURATIONS = [
@@ -181,6 +182,8 @@ function Hub() {
           Join by Code
         </Button>
       </main>
+
+      <Footer />
 
       {/* Searching overlay */}
       {searching && (

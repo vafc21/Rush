@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
+import { Footer } from "@/components/Footer";
 
 export default function Landing() {
   const router = useRouter();
@@ -30,7 +31,8 @@ export default function Landing() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-10 p-6">
+    <div className="flex min-h-screen flex-col">
+      <main className="flex flex-1 flex-col items-center justify-center gap-10 p-6">
       <div className="flex items-center gap-3">
         <div className="h-6 w-6 rotate-45 rounded bg-gradient-to-br from-accent to-brand" />
         <h1 className="text-4xl font-black tracking-widest">RUSH</h1>
@@ -78,6 +80,8 @@ export default function Landing() {
           </Button>
         </div>
       </Modal>
-    </main>
+      </main>
+      <Footer />
+    </div>
   );
 }

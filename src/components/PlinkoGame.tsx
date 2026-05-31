@@ -80,7 +80,6 @@ export function PlinkoGame({
 }) {
   const [betDollars, setBetDollars] = useState("1");
   const [risk, setRisk] = useState<Risk>("medium");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastBank, setLastBank] = useState<{
     multiplier: number;
@@ -96,6 +95,12 @@ export function PlinkoGame({
   const idRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
   const [, setTick] = useState(0);
+
+  // Pessimistic in-flight bet total so the player can rapid-fire balls
+  // before the server's balance_update has come back. Decremented when
+  // a drop resolves (so the budget gets returned, then the server's
+  // balance_update arrives a beat later with the real number).
+  const inFlightCentsRef = useRef(0);
 
   const table = multiplierTable(risk);
 
@@ -239,18 +244,28 @@ export function PlinkoGame({
       setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
       return;
     }
-    if (betCents > balanceCents) {
+    // Pessimistic balance check accounting for in-flight bets so a
+    // rapid-fire player can't oversubscribe their balance and only
+    // discover it when the server rejects.
+    if (betCents + inFlightCentsRef.current > balanceCents) {
       setError("Insufficient balance");
       return;
     }
-    setBusy(true);
     setError(null);
-    const res = await fetch("/api/games/plinko/play", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lobbyId, betCents, risk }),
-    });
-    setBusy(false);
+    inFlightCentsRef.current += betCents;
+    let res: Response;
+    try {
+      res = await fetch("/api/games/plinko/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lobbyId, betCents, risk }),
+      });
+    } catch (e) {
+      inFlightCentsRef.current -= betCents;
+      setError("network error");
+      return;
+    }
+    inFlightCentsRef.current -= betCents;
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "drop failed");
@@ -306,7 +321,6 @@ export function PlinkoGame({
             <button
               key={r}
               onClick={() => setRisk(r)}
-              disabled={busy}
               className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
                 risk === r ? "bg-accent text-bg" : "bg-bg text-muted hover:text-white"
               }`}
@@ -420,26 +434,27 @@ export function PlinkoGame({
             max={MAX_BET_CENTS / 100}
             step="0.50"
             value={betDollars}
-            disabled={busy}
             onChange={(e) => setBetDollars(e.target.value)}
           />
           <button
             type="button"
-            disabled={busy}
             onClick={() =>
               setBetDollars(
                 (Math.min(balanceCents, MAX_BET_CENTS) / 100).toFixed(2)
               )
             }
-            className="rounded-md bg-brand/15 px-3 text-xs font-bold text-brand transition hover:bg-brand/25 active:scale-95 disabled:opacity-50"
+            className="rounded-md bg-brand/15 px-3 text-xs font-bold text-brand transition hover:bg-brand/25 active:scale-95"
           >
             Max
           </button>
         </div>
       </div>
 
-      <Button onClick={drop} disabled={busy} className="w-full">
-        {busy ? "Dropping…" : "Drop Ball"}
+      <Button
+        onClick={drop}
+        className="w-full transition-transform active:scale-[0.98]"
+      >
+        Drop Ball{balls.length > 0 ? ` (${balls.length})` : ""}
       </Button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

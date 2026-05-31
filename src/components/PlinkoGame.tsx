@@ -25,7 +25,10 @@ const PEG_R = 1.8;
 const BALL_R = 4.2;
 const GRAVITY = 520;                             // units / s^2 — tuned so a full fall takes ~3s
 const SIDE_DAMP = 0.55;                          // wall bounce damp
-const PEG_DEFLECT_VX = 65;                       // horizontal speed kicked by peg
+// Peg deflect vx tuned so the ball lands close to the next row's peg:
+// rows are PEG_SPACING_X / 2 apart, time-between-rows ≈ 0.2s, so target
+// horizontal travel ≈ PEG_SPACING_X / 2 / 0.2 = ~44 units/s.
+const PEG_DEFLECT_VX = 42;
 const PEG_VY_KEEP = 0.45;                        // fraction of downward vy retained after peg hit (no reversal)
 const PEG_VY_MIN = 25;                           // floor on post-peg downward vy so ball keeps moving
 const SPAWN_VY = 40;                             // initial downward speed (so ball moves immediately)
@@ -137,12 +140,19 @@ export function PlinkoGame({
           const dy = b.y - peg.y;
           const distSq = dx * dx + dy * dy;
           const r = BALL_R + PEG_R;
-          if (distSq < r * r && b.y > peg.y - r * 0.8) {
-            const goRight = b.path[b.nextRow];
-            const dir = goRight ? 1 : -1;
+          const goRight = b.path[b.nextRow];
+          const dir = goRight ? 1 : -1;
+          const hit = distSq < r * r && b.y > peg.y - r * 0.8;
+          // Safety net: if the ball has already passed this peg's row
+          // without colliding (numerical miss because vx pushed it past
+          // the lateral capture window), force the deflection anyway.
+          // Otherwise the ball is stuck looking for a peg it can never
+          // reach and falls forever past the floor.
+          const passed = b.y > peg.y + r * 1.2;
+          if (hit || passed) {
             b.x = peg.x + dir * r * 0.95;
             b.y = peg.y + r * 0.4;
-            b.vx = dir * PEG_DEFLECT_VX + (Math.random() - 0.5) * 12;
+            b.vx = dir * PEG_DEFLECT_VX + (Math.random() - 0.5) * 8;
             // Preserve downward momentum — peg deflects sideways, doesn't bounce
             // the ball back up. Use the larger of "fraction of incoming vy"
             // and a minimum, so the ball never stalls.

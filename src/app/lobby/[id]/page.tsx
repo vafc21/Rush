@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/Button";
 import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
@@ -16,6 +16,7 @@ type Snapshot = {
   lobby: {
     id: string;
     code: string;
+    type: "public" | "private";
     size: number;
     duration_seconds: number;
     status: "waiting" | "active" | "ended";
@@ -34,11 +35,15 @@ type Snapshot = {
 
 export default function LobbyPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [endsAt, setEndsAt] = useState<number | null>(null);
   const [startsAt, setStartsAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [selfNickname, setSelfNickname] = useState<string | null>(null);
+  // Once we've ever found ourselves in the lobby, track that. If we then
+  // disappear (host kicked/banned us), redirect home.
+  const everSeenSelfRef = useRef(false);
   // Ref-bridge for pushing emojis into the floating layer from outside
   // the layer's own render scope (specifically, from the pusher handler).
   const pushReactionRef = useRef<((emoji: string) => void) | null>(null);
@@ -101,6 +106,11 @@ export default function LobbyPage() {
                 final_rank: null,
               },
             ],
+          };
+        case "player_left":
+          return {
+            ...s,
+            players: s.players.filter((p) => p.id !== e.lobbyPlayerId),
           };
         case "lobby_starting":
           // Round has begun on the server; flip the snapshot to active so
@@ -188,6 +198,24 @@ export default function LobbyPage() {
     return () => clearTimeout(handle);
   }, [lobbyStatus, endsAt, nowMs]);
 
+  // Kick/ban detection: once we've been seen in this lobby, disappearing
+  // from the player list means the host removed us. Send the player
+  // back to the hub.
+  const selfStillPresent =
+    !!snapshot &&
+    !!selfNickname &&
+    snapshot.players.some((p) => p.nickname === selfNickname);
+  useEffect(() => {
+    if (!snapshot) return;
+    if (selfStillPresent) {
+      everSeenSelfRef.current = true;
+      return;
+    }
+    if (everSeenSelfRef.current && snapshot.lobby.status !== "ended") {
+      router.replace("/play?kicked=1");
+    }
+  }, [snapshot, selfStillPresent, router]);
+
   if (!snapshot) return <main className="p-6">Loading…</main>;
 
   const self = snapshot.players.find((p) => p.nickname === selfNickname);
@@ -196,6 +224,7 @@ export default function LobbyPage() {
     nickname: p.nickname,
     balanceCents: p.balance_cents,
     isBusted: p.is_busted,
+    isBot: p.is_bot,
   }));
 
   const secondsLeft =
@@ -247,44 +276,153 @@ function Waiting({
   snapshot: Snapshot;
   selfNickname: string | null;
 }) {
+  const hostPlayer = snapshot.players[0];
   const isHost =
-    selfNickname !== null && snapshot.players[0]?.nickname === selfNickname;
+    selfNickname !== null && hostPlayer?.nickname === selfNickname;
+  const isCustom = snapshot.lobby.type === "private";
   const [busy, setBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   async function start() {
     setBusy(true);
-    const res = await fetch(`/api/lobbies/${snapshot.lobby.id}/start`, { method: "POST" });
-    // If Pusher takes a moment to deliver the lobby_starting event back to
-    // this very client (it should be near-instant but isn't guaranteed),
-    // we don't want to leave the host staring at the waiting room. The
-    // page-level Pusher handler flips status to "active" on lobby_starting,
-    // but as belt-and-braces we leave the button in its busy state — the
-    // page will rerender shortly after the event arrives.
-    if (!res.ok) setBusy(false);
+    setError(null);
+    const res = await fetch(`/api/lobbies/${snapshot.lobby.id}/start`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "could not start");
+      setBusy(false);
+    }
   }
+
+  async function addCpu() {
+    setActionBusy("add");
+    setError(null);
+    const res = await fetch(
+      `/api/lobbies/${snapshot.lobby.id}/add-cpu`,
+      { method: "POST" }
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "could not add CPU");
+    }
+    setActionBusy(null);
+  }
+
+  async function kick(lobbyPlayerId: string) {
+    setActionBusy(`k-${lobbyPlayerId}`);
+    setError(null);
+    const res = await fetch(`/api/lobbies/${snapshot.lobby.id}/kick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lobbyPlayerId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "kick failed");
+    }
+    setActionBusy(null);
+  }
+
+  async function ban(lobbyPlayerId: string) {
+    setActionBusy(`b-${lobbyPlayerId}`);
+    setError(null);
+    const res = await fetch(`/api/lobbies/${snapshot.lobby.id}/ban`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lobbyPlayerId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "ban failed");
+    }
+    setActionBusy(null);
+  }
+
   return (
     <div className="rounded-lg bg-panel p-6">
       <h2 className="mb-2 text-xl font-bold">Waiting Room</h2>
       <p className="mb-4 text-secondary">
         Share this code:{" "}
-        <span className="font-mono text-2xl text-brand">{snapshot.lobby.code}</span>
+        <span className="font-mono text-2xl text-brand">
+          {snapshot.lobby.code}
+        </span>
       </p>
       <p className="mb-1 text-xs uppercase tracking-wider text-muted">
-        Seated ({snapshot.players.length} / {snapshot.lobby.size})
+        Seated ({snapshot.players.length})
       </p>
       <ul className="mb-4 space-y-1">
-        {snapshot.players.map((p) => (
-          <li key={p.id} className="text-sm">
-            {p.nickname}
-          </li>
-        ))}
+        {snapshot.players.map((p, idx) => {
+          const isThisHost = idx === 0;
+          const isSelf = selfNickname === p.nickname;
+          return (
+            <li
+              key={p.id}
+              className="flex items-center justify-between rounded bg-bg/40 px-2 py-1.5 text-sm"
+            >
+              <span className="flex items-center gap-2 truncate">
+                <span className="truncate">{p.nickname}</span>
+                {p.is_bot && (
+                  <span className="rounded bg-secondary/15 px-1.5 py-0.5 text-[10px] font-bold text-secondary">
+                    CPU
+                  </span>
+                )}
+                {isThisHost && (
+                  <span className="rounded bg-brand/20 px-1.5 py-0.5 text-[10px] font-bold text-brand">
+                    HOST
+                  </span>
+                )}
+                {isSelf && !isThisHost && (
+                  <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                    YOU
+                  </span>
+                )}
+              </span>
+              {isHost && isCustom && !isThisHost && (
+                <span className="flex shrink-0 gap-1">
+                  <button
+                    onClick={() => kick(p.id)}
+                    disabled={actionBusy === `k-${p.id}`}
+                    className="rounded bg-bg px-2 py-0.5 text-[10px] font-bold text-muted transition hover:bg-bg/70 hover:text-white disabled:opacity-50"
+                  >
+                    Kick
+                  </button>
+                  {!p.is_bot && (
+                    <button
+                      onClick={() => ban(p.id)}
+                      disabled={actionBusy === `b-${p.id}`}
+                      className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                    >
+                      Ban
+                    </button>
+                  )}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
+      {isHost && isCustom && (
+        <button
+          onClick={addCpu}
+          disabled={actionBusy === "add" || snapshot.players.length >= 32}
+          className="mb-3 w-full rounded-md border border-dashed border-secondary/40 px-3 py-2 text-sm font-semibold text-secondary transition hover:border-accent hover:text-accent disabled:opacity-50"
+        >
+          {actionBusy === "add" ? "Adding…" : "+ Add CPU"}
+        </button>
+      )}
+      {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
       {isHost && (
         <Button onClick={start} disabled={busy}>
           {busy ? "Starting…" : "Start Match"}
         </Button>
       )}
       {!isHost && (
-        <p className="text-xs text-muted">Waiting for the host to start the match…</p>
+        <p className="text-xs text-muted">
+          Waiting for the host to start the match…
+        </p>
       )}
     </div>
   );

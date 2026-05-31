@@ -3,8 +3,11 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { generateLobbyCode } from "@/lib/lobby/codes";
 
-const ALLOWED_SIZES = new Set([4, 8, 16]);
 const ALLOWED_DURATIONS = new Set([180, 420, 900]);
+// Custom lobbies don't enforce a size cap on the host — they fit
+// whoever shows up plus whatever CPUs the host adds. The hard ceiling
+// matches lobbies.size_check (2..32) in the migration.
+const CUSTOM_LOBBY_CAP = 32;
 
 export async function POST(req: NextRequest) {
   let session;
@@ -15,12 +18,8 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => ({}))) as {
-    size?: number;
     durationSeconds?: number;
   };
-  if (!ALLOWED_SIZES.has(body.size as number)) {
-    return NextResponse.json({ error: "invalid size" }, { status: 400 });
-  }
   if (!ALLOWED_DURATIONS.has(body.durationSeconds as number)) {
     return NextResponse.json({ error: "invalid duration" }, { status: 400 });
   }
@@ -37,7 +36,7 @@ export async function POST(req: NextRequest) {
         code,
         type: "private",
         host_user_id: hostUserId,
-        size: body.size,
+        size: CUSTOM_LOBBY_CAP,
         duration_seconds: body.durationSeconds,
         status: "waiting",
       })

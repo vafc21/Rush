@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
@@ -15,6 +15,8 @@ const DURATIONS = [
 
 export default function Hub() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const wasKicked = searchParams.get("kicked") === "1";
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [size, setSize] = useState<4 | 8 | 16>(4);
@@ -93,7 +95,7 @@ export default function Hub() {
     const res = await fetch("/api/lobbies/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ size, durationSeconds: duration }),
+      body: JSON.stringify({ durationSeconds: duration }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -155,6 +157,11 @@ export default function Hub() {
                 {me.kind === "user" ? "Sign out" : "Exit"}
               </button>
             </div>
+          </div>
+        )}
+        {wasKicked && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            You were removed from that lobby by the host.
           </div>
         )}
         <h1 className="text-xl font-bold">Play</h1>
@@ -246,22 +253,6 @@ export default function Hub() {
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Lobby">
         <div className="flex flex-col gap-4">
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wider text-muted">Players</p>
-            <div className="flex gap-2">
-              {SIZES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSize(s)}
-                  className={`flex-1 rounded-md py-2 text-sm font-semibold ${
-                    size === s ? "bg-accent text-bg" : "bg-bg text-secondary"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
             <p className="mb-2 text-xs uppercase tracking-wider text-muted">Duration</p>
             <div className="flex gap-2">
               {DURATIONS.map((d) => (
@@ -277,6 +268,10 @@ export default function Hub() {
               ))}
             </div>
           </div>
+          <p className="text-center text-[10px] text-muted">
+            Invite friends with the lobby code, or add CPUs from the
+            waiting room.
+          </p>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <Button onClick={createLobby} disabled={busy}>
             {busy ? "Creating…" : "Create"}

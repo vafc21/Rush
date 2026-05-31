@@ -17,7 +17,7 @@ export async function GET(
 
   const { data: lobby, error: le } = await supabase
     .from("lobbies")
-    .select("id, code, size, duration_seconds, status, started_at, ended_at")
+    .select("id, code, type, size, duration_seconds, status, started_at, ended_at")
     .eq("id", id)
     .single();
   if (le || !lobby) {

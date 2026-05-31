@@ -7,6 +7,7 @@ export type Seat = {
   nickname: string;
   balanceCents: number;
   isBusted: boolean;
+  isBot?: boolean;
 };
 
 export function LeaderboardPanel({
@@ -74,9 +75,14 @@ export function LeaderboardPanel({
                   : ""
             }`}
           >
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               <span className="w-4 text-muted tabular-nums">{i + 1}</span>
               <span className="truncate">{s.nickname}</span>
+              {s.isBot && (
+                <span className="rounded bg-secondary/15 px-1 py-0.5 text-[9px] font-bold text-secondary">
+                  CPU
+                </span>
+              )}
             </span>
             <AnimatedAmount cents={s.balanceCents} durationMs={500} />
           </div>

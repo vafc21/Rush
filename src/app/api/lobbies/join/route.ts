@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { isLobbyCode } from "@/lib/lobby/codes";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { banIdentifierForSession } from "@/lib/lobby/host";
 
 export async function POST(req: NextRequest) {
   let session;
@@ -30,6 +31,21 @@ export async function POST(req: NextRequest) {
   }
   if (lobby.status !== "waiting") {
     return NextResponse.json({ error: "lobby already started" }, { status: 409 });
+  }
+
+  // Ban check — host kicked + banned them previously
+  const identifier = banIdentifierForSession(session);
+  const { data: ban } = await supabase
+    .from("lobby_bans")
+    .select("id")
+    .eq("lobby_id", lobby.id)
+    .eq("identifier", identifier)
+    .maybeSingle();
+  if (ban) {
+    return NextResponse.json(
+      { error: "you are banned from this lobby" },
+      { status: 403 }
+    );
   }
 
   const { count } = await supabase

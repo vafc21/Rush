@@ -21,7 +21,7 @@ export async function POST(
 
   const { data: lobby, error: le } = await supabase
     .from("lobbies")
-    .select("id, status, size, duration_seconds")
+    .select("id, status, size, type, duration_seconds")
     .eq("id", lobbyId)
     .single();
   if (le || !lobby) {
@@ -31,37 +31,38 @@ export async function POST(
     return NextResponse.json({ error: "already started" }, { status: 409 });
   }
 
-  // Count current seats
-  const { data: existing } = await supabase
-    .from("lobby_players")
-    .select("id")
-    .eq("lobby_id", lobbyId);
-  const seated = existing?.length ?? 0;
-  const botsNeeded = lobby.size - seated;
-
-  // Insert bots and broadcast a player_joined event for each one so
-  // already-connected clients add them to their leaderboard without
-  // having to re-fetch the snapshot.
-  const botRows = Array.from({ length: botsNeeded }, () => ({
-    lobby_id: lobbyId,
-    user_id: null,
-    nickname: generateNickname(),
-    is_bot: true,
-    balance_cents: 100000,
-  }));
-  if (botRows.length > 0) {
-    const { data: insertedBots, error: be } = await supabase
+  // Auto-fill bots only for matchmaking lobbies. Custom (private)
+  // lobbies start with exactly whoever the host added — friends + any
+  // CPUs they explicitly added with the + Add CPU button.
+  if (lobby.type === "public") {
+    const { data: existing } = await supabase
       .from("lobby_players")
-      .insert(botRows)
-      .select("id, nickname, is_bot");
-    if (be) return NextResponse.json({ error: be.message }, { status: 500 });
-    for (const bot of insertedBots ?? []) {
-      await publishLobby(lobbyId, {
-        type: "player_joined",
-        lobbyPlayerId: bot.id,
-        nickname: bot.nickname,
-        isBot: bot.is_bot,
-      });
+      .select("id")
+      .eq("lobby_id", lobbyId);
+    const seated = existing?.length ?? 0;
+    const botsNeeded = Math.max(0, lobby.size - seated);
+
+    const botRows = Array.from({ length: botsNeeded }, () => ({
+      lobby_id: lobbyId,
+      user_id: null,
+      nickname: generateNickname(),
+      is_bot: true,
+      balance_cents: 100000,
+    }));
+    if (botRows.length > 0) {
+      const { data: insertedBots, error: be } = await supabase
+        .from("lobby_players")
+        .insert(botRows)
+        .select("id, nickname, is_bot");
+      if (be) return NextResponse.json({ error: be.message }, { status: 500 });
+      for (const bot of insertedBots ?? []) {
+        await publishLobby(lobbyId, {
+          type: "player_joined",
+          lobbyPlayerId: bot.id,
+          nickname: bot.nickname,
+          isBot: bot.is_bot,
+        });
+      }
     }
   }
 

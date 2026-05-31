@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/end-rounds",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/crash-tick",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/matchmake",
-      "schedule": "* * * * *"
+      "path": "/api/cron/tick",
+      "schedule": "0 0 * * *"
     }
   ]
 }

@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { pts } from "@/lib/format";
 
 /**
- * Smoothly tweens a dollar amount between values. When `cents` changes,
+ * Smoothly tweens a points amount between values. When `cents` changes,
  * the displayed value counts up (or down) over `durationMs`.
  *
  * Used in the TopBar so balance changes don't snap — they roll like a
@@ -50,7 +51,7 @@ export function AnimatedAmount({
 
   return (
     <span className={`tabular-nums ${className}`}>
-      ${(displayed / 100).toFixed(2)}
+      {pts(displayed)} pts
     </span>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { AnimatedAmount } from "./AnimatedAmount";
+import { pts as fmtPts } from "@/lib/format";
 
 type Results = {
   lobby: {
@@ -241,9 +242,9 @@ export function EndOfRoundGraph({
 
         {/* Y-axis labels */}
         <div className="pointer-events-none absolute right-1 top-0 flex h-full flex-col justify-between py-1 text-[10px] text-muted tabular-nums">
-          <span>${(yMax / 100).toFixed(0)}</span>
-          <span>${(lobby.starting_balance_cents / 100).toFixed(0)}</span>
-          <span>${(yMin / 100).toFixed(0)}</span>
+          <span>{fmtPts(yMax)} pts</span>
+          <span>{fmtPts(lobby.starting_balance_cents)} pts</span>
+          <span>{fmtPts(yMin)} pts</span>
         </div>
       </div>
 

@@ -61,7 +61,7 @@ export default function OpengraphImage() {
             color: "#7B8BA8",
           }}
         >
-          $1,000 each · highest balance wins
+          1,000 points each · highest balance wins
         </div>
       </div>
     ),

@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card } from "@/lib/games/baccarat";
+import { pts } from "@/lib/format";
 
 const RANK_LABELS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
@@ -52,11 +53,11 @@ export function BaccaratGame({
   async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Min bet ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
+      setError(`Max bet ${pts(MAX_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > balanceCents) {
@@ -107,8 +108,8 @@ export function BaccaratGame({
           >
             {hand.winner} won ·{" "}
             {hand.won
-              ? `+$${((hand.payoutCents - hand.betCents) / 100).toFixed(2)}`
-              : `-$${(hand.betCents / 100).toFixed(2)}`}
+              ? `+${pts(hand.payoutCents - hand.betCents)} pts`
+              : `-${pts(hand.betCents)} pts`}
           </div>
         </div>
       )}
@@ -142,7 +143,7 @@ export function BaccaratGame({
       <div>
         <div className="mb-1 flex justify-between text-xs text-muted">
           <span>Bet</span>
-          <span className="text-[10px]">Max ${(MAX_BET_CENTS / 100).toFixed(0)}</span>
+          <span className="text-[10px]">Max {pts(MAX_BET_CENTS)} pts</span>
         </div>
         <div className="flex gap-2">
           <input

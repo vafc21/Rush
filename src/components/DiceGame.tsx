@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
+import { pts } from "@/lib/format";
 
 type LastRoll = {
   won: boolean;
@@ -61,11 +62,11 @@ export function DiceGame({
   async function roll(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Minimum bet is ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per roll`);
+      setError(`Max bet is ${pts(MAX_BET_CENTS)} pts per roll`);
       return false;
     }
     if (betCents > balanceCents) {
@@ -269,7 +270,7 @@ export function DiceGame({
           <p className="text-[10px] text-muted">
             Max{" "}
             <span className="tabular-nums text-secondary">
-              ${(MAX_BET_CENTS / 100).toFixed(0)}
+              {pts(MAX_BET_CENTS)} pts
             </span>{" "}
             / roll
           </p>
@@ -350,8 +351,8 @@ export function DiceGame({
           }`}
         >
           {last.won
-            ? `Won $${(last.payoutCents / 100).toFixed(2)}`
-            : `Lost $${(last.betCents / 100).toFixed(2)}`}
+            ? `Won ${pts(last.payoutCents)} pts`
+            : `Lost ${pts(last.betCents)} pts`}
         </div>
       )}
     </div>

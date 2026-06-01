@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
+import { pts } from "@/lib/format";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -47,11 +48,11 @@ export function DragonTowerGame({
   async function start() {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Minimum bet is ${pts(MIN_BET_CENTS)} pts`);
       return;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per game`);
+      setError(`Max bet is ${pts(MAX_BET_CENTS)} pts per game`);
       return;
     }
     if (betCents > balanceCents) {
@@ -175,7 +176,7 @@ export function DragonTowerGame({
             </span>{" "}
             ·{" "}
             <span className="tabular-nums text-white">
-              ${(potentialPayout / 100).toFixed(2)}
+              {pts(potentialPayout)} pts
             </span>
           </div>
         )}
@@ -272,7 +273,7 @@ export function DragonTowerGame({
               <p className="text-[10px] text-muted">
                 Max{" "}
                 <span className="tabular-nums text-secondary">
-                  ${(MAX_BET_CENTS / 100).toFixed(0)}
+                  {pts(MAX_BET_CENTS)} pts
                 </span>
               </p>
             </div>
@@ -317,7 +318,7 @@ export function DragonTowerGame({
         >
           {game.climbed.length === 0
             ? "Pick a tile to start"
-            : `Cash Out $${(potentialPayout / 100).toFixed(2)}`}
+            : `Cash Out ${pts(potentialPayout)} pts`}
         </Button>
       )}
 
@@ -326,7 +327,7 @@ export function DragonTowerGame({
         <div className="space-y-2 rounded-md bg-red-500/10 px-3 py-3 text-center">
           <p className="text-2xl font-black text-red-300">🐉 Burned</p>
           <p className="text-sm text-red-300">
-            Lost ${(game.betCents / 100).toFixed(2)} on row {currentRow + 1}
+            Lost {pts(game.betCents)} pts on row {currentRow + 1}
           </p>
           <button
             onClick={reset}
@@ -339,7 +340,7 @@ export function DragonTowerGame({
       {game?.status === "cashed" && lastPayout !== null && (
         <div className="space-y-2 rounded-md bg-accent/10 px-3 py-3 text-center">
           <p className="text-2xl font-black text-accent">
-            +${(lastPayout / 100).toFixed(2)}
+            +{pts(lastPayout)} pts
           </p>
           <p className="text-sm text-accent/80">
             Climbed {game.climbed.length} rows at {game.multiplier.toFixed(2)}x

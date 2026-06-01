@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { pts } from "@/lib/format";
 
 /**
  * Tiny Flappy Bird-style skill game. Tap (or hit space) to flap, dodge
@@ -261,14 +262,14 @@ export function FlappyGame({
           🐦 Flappy
         </h2>
         <p className="mt-1 text-xs text-secondary">
-          Tap / space to flap. $0.01 per pipe — multiplier doubles every 10.
+          Tap / space to flap. 0.01 pts per pipe — multiplier doubles every 10.
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Pipes" value={String(pipeCount)} tone="white" />
         <Stat label="Multi" value={`${multiplierAt(pipeCount)}×`} tone="brand" />
-        <Stat label="Banked" value={`$${(banked / 100).toFixed(2)}`} tone="accent" />
+        <Stat label="Banked" value={`${pts(banked)} pts`} tone="accent" />
       </div>
 
       <div
@@ -292,7 +293,7 @@ export function FlappyGame({
         <div className="space-y-2">
           {banked > 0 ? (
             <p className="rounded-lg bg-accent/10 px-3 py-2 text-center text-sm font-bold text-accent ring-1 ring-accent/20">
-              +${(banked / 100).toFixed(2)} cashed into your balance
+              +{pts(banked)} pts cashed into your balance
             </p>
           ) : (
             <p className="rounded-lg bg-white/5 px-3 py-2 text-center text-sm text-muted">
@@ -301,7 +302,7 @@ export function FlappyGame({
           )}
           {bestBanked > 0 && (
             <p className="text-center text-xs text-muted">
-              Best run this session: ${(bestBanked / 100).toFixed(2)}
+              Best run this session: {pts(bestBanked)} pts
             </p>
           )}
           <Button onClick={tryAgain} className="w-full">
@@ -417,7 +418,7 @@ function draw(ctx: CanvasRenderingContext2D, s: GameState) {
     panel(
       ctx,
       "Splat!",
-      `${s.pipeCount} pipes · $${(bankedFor(s.pipeCount) / 100).toFixed(2)} banked`
+      `${s.pipeCount} pipes · ${pts(bankedFor(s.pipeCount))} pts banked`
     );
   }
 }

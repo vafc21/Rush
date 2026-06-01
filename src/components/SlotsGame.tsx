@@ -5,6 +5,7 @@ import { WinBurst } from "./WinBurst";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Symbol, SYMBOLS } from "@/lib/games/slots";
+import { pts } from "@/lib/format";
 
 /**
  * 3-reel slot machine with proper deceleration. Each reel is a vertical
@@ -97,11 +98,11 @@ export function SlotsGame({
   async function spin(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Min bet ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
+      setError(`Max bet ${pts(MAX_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > balanceCents) {
@@ -217,7 +218,7 @@ export function SlotsGame({
       <div>
         <div className="mb-1 flex justify-between text-xs text-muted">
           <span>Bet</span>
-          <span className="text-[10px]">Max ${(MAX_BET_CENTS / 100).toFixed(0)}</span>
+          <span className="text-[10px]">Max {pts(MAX_BET_CENTS)} pts</span>
         </div>
         <div className="flex gap-2">
           <input
@@ -255,8 +256,8 @@ export function SlotsGame({
           }`}
         >
           {last.multiplier > 0
-            ? `${last.multiplier}x · +$${((last.payoutCents - last.betCents) / 100).toFixed(2)}`
-            : `-$${(last.betCents / 100).toFixed(2)}`}
+            ? `${last.multiplier}x · +${pts(last.payoutCents - last.betCents)} pts`
+            : `-${pts(last.betCents)} pts`}
         </div>
       )}
     </div>

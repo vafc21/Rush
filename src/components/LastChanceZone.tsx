@@ -7,8 +7,8 @@ import { FlappyGame } from "./FlappyGame";
 type Path = "wheel" | "mines" | "flappy";
 
 const PATHS: { id: Path; label: string; icon: string; sub: string }[] = [
-  { id: "wheel", label: "Wheel", icon: "🎡", sub: "1 / 50 · $500" },
-  { id: "mines", label: "Mines", icon: "💣", sub: "1 / 25 · $500" },
+  { id: "wheel", label: "Wheel", icon: "🎡", sub: "1 / 50 · 500 pts" },
+  { id: "mines", label: "Mines", icon: "💣", sub: "1 / 25 · 500 pts" },
   { id: "flappy", label: "Flappy", icon: "🐦", sub: "skill · cents" },
 ];
 

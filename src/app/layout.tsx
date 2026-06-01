@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://rush.vlad-p.com";
 const description =
-  "Beat your friends at fake-money casino games. $1,000 each, a few minutes, highest balance wins.";
+  "Beat your friends at fake-money casino games. 1,000 points each, a few minutes, highest balance wins.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

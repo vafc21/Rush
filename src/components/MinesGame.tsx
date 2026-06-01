@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { MIN_MINES, MAX_MINES, MINES_TILES } from "@/lib/games/mines";
+import { pts } from "@/lib/format";
 
 /**
  * Visual state per tile:
@@ -113,10 +114,10 @@ export function MinesGame({
   function validateBet(): { ok: true; betCents: number } | { ok: false; error: string } {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      return { ok: false, error: `Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}` };
+      return { ok: false, error: `Minimum bet is ${pts(MIN_BET_CENTS)} pts` };
     }
     if (betCents > MAX_BET_CENTS) {
-      return { ok: false, error: `Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per game` };
+      return { ok: false, error: `Max bet is ${pts(MAX_BET_CENTS)} pts per game` };
     }
     if (betCents > balanceCents) {
       return { ok: false, error: "Insufficient balance" };
@@ -322,7 +323,7 @@ export function MinesGame({
               </span>{" "}
               ·{" "}
               <span className="tabular-nums text-white">
-                ${(potentialPayout / 100).toFixed(2)}
+                {pts(potentialPayout)} pts
               </span>
             </div>
           )}
@@ -427,7 +428,7 @@ export function MinesGame({
               <p className="text-[10px] text-muted">
                 Max{" "}
                 <span className="tabular-nums text-secondary">
-                  ${(MAX_BET_CENTS / 100).toFixed(0)}
+                  {pts(MAX_BET_CENTS)} pts
                 </span>{" "}
                 / game
               </p>
@@ -520,7 +521,7 @@ export function MinesGame({
         >
           {game.revealed.size === 0
             ? "Click a tile to start"
-            : `Cash Out $${(potentialPayout / 100).toFixed(2)}`}
+            : `Cash Out ${pts(potentialPayout)} pts`}
         </Button>
       )}
 
@@ -529,7 +530,7 @@ export function MinesGame({
         <div className="space-y-2 rounded-md bg-red-500/10 px-3 py-3 text-center">
           <p className="text-2xl font-black text-red-300">BOOM</p>
           <p className="text-sm text-red-300">
-            Lost ${(game.betCents / 100).toFixed(2)}
+            Lost {pts(game.betCents)} pts
           </p>
           {!autoActiveRef.current && (
             <button
@@ -544,7 +545,7 @@ export function MinesGame({
       {game?.status === "cashed" && lastPayout !== null && (
         <div className="space-y-2 rounded-md bg-accent/10 px-3 py-3 text-center">
           <p className="text-2xl font-black text-accent">
-            +${(lastPayout / 100).toFixed(2)}
+            +{pts(lastPayout)} pts
           </p>
           <p className="text-sm text-accent/80">
             Cashed at {game.multiplier.toFixed(2)}x

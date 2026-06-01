@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { multiplierTable, ROWS, Risk } from "@/lib/games/plinko";
+import { pts } from "@/lib/format";
 
 /**
  * Plinko with real per-frame physics. Each ball is a body with position
@@ -238,11 +239,11 @@ export function PlinkoGame({
   const drop = useCallback(async (): Promise<boolean> => {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Min bet ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
+      setError(`Max bet ${pts(MAX_BET_CENTS)} pts`);
       return false;
     }
     // Pessimistic balance check accounting for in-flight bets so a
@@ -424,7 +425,7 @@ export function PlinkoGame({
           <span className="text-[10px]">
             Max{" "}
             <span className="tabular-nums text-secondary">
-              ${(MAX_BET_CENTS / 100).toFixed(0)}
+              {pts(MAX_BET_CENTS)} pts
             </span>
           </span>
         </div>
@@ -470,8 +471,8 @@ export function PlinkoGame({
           }`}
         >
           Slot multi {lastBank.multiplier}x ·{" "}
-          {lastBank.payoutCents >= lastBank.betCents ? "+" : ""}$
-          {((lastBank.payoutCents - lastBank.betCents) / 100).toFixed(2)}
+          {lastBank.payoutCents >= lastBank.betCents ? "+" : ""}
+          {pts(lastBank.payoutCents - lastBank.betCents)} pts
         </div>
       )}
     </div>

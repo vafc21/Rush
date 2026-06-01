@@ -5,6 +5,7 @@ import { WinBurst } from "./WinBurst";
 import { AutoBet } from "./AutoBet";
 import { MAX_BET_CENTS } from "@/lib/games/limits";
 import { Bet, colorOf } from "@/lib/games/roulette";
+import { pts } from "@/lib/format";
 
 type ChipBet = { bet: Bet; amountCents: number };
 
@@ -64,7 +65,7 @@ export function RouletteGame({
         totalCents > balanceCents
           ? "Insufficient balance"
           : totalCents > MAX_BET_CENTS
-            ? `Max total $${MAX_BET_CENTS / 100}`
+            ? `Max total ${pts(MAX_BET_CENTS)} pts`
             : "Place a bet first"
       );
       return false;
@@ -263,7 +264,7 @@ export function RouletteGame({
             <span className="text-sm font-bold">{result.color}</span>
           </span>
           <span className="text-sm font-bold tabular-nums">
-            {result.netDelta >= 0 ? "+" : ""}${(result.netDelta / 100).toFixed(2)}
+            {result.netDelta >= 0 ? "+" : ""}{pts(result.netDelta)} pts
           </span>
         </div>
       )}
@@ -301,7 +302,7 @@ export function RouletteGame({
 
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted">
-          Chip ${(chipCents / 100).toFixed(2)} · {bets.length} bets · total ${(totalCents / 100).toFixed(2)}
+          Chip {pts(chipCents)} pts · {bets.length} bets · total {pts(totalCents)} pts
         </span>
         <button onClick={clearBets} disabled={busy} className="text-muted hover:text-white underline">
           Clear
@@ -319,7 +320,7 @@ export function RouletteGame({
           onChange={(e) => setChipDollars(e.target.value)}
         />
         <Button onClick={spin} disabled={busy || bets.length === 0} className="flex-1">
-          {busy ? "Spinning…" : `Spin ($${(totalCents / 100).toFixed(2)})`}
+          {busy ? "Spinning…" : `Spin (${pts(totalCents)} pts)`}
         </Button>
       </div>
       <AutoBet onPlay={spin} pauseMs={400} />

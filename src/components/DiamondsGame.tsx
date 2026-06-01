@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Gem } from "@/lib/games/diamonds";
+import { pts } from "@/lib/format";
 
 type Result = {
   hand: Gem[];
@@ -28,11 +29,11 @@ export function DiamondsGame({
   async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Min bet $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Min bet ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet $${(MAX_BET_CENTS / 100).toFixed(0)}`);
+      setError(`Max bet ${pts(MAX_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > balanceCents) {
@@ -82,7 +83,7 @@ export function DiamondsGame({
       <div>
         <div className="mb-1 flex justify-between text-xs text-muted">
           <span>Bet</span>
-          <span className="text-[10px]">Max ${(MAX_BET_CENTS / 100).toFixed(0)}</span>
+          <span className="text-[10px]">Max {pts(MAX_BET_CENTS)} pts</span>
         </div>
         <div className="flex gap-2">
           <input
@@ -120,8 +121,8 @@ export function DiamondsGame({
           }`}
         >
           {last.cluster
-            ? `${last.cluster.size}× ${last.cluster.gem} · ${last.multiplier}x · +$${((last.payoutCents - last.betCents) / 100).toFixed(2)}`
-            : `No cluster · -$${(last.betCents / 100).toFixed(2)}`}
+            ? `${last.cluster.size}× ${last.cluster.gem} · ${last.multiplier}x · +${pts(last.payoutCents - last.betCents)} pts`
+            : `No cluster · -${pts(last.betCents)} pts`}
         </div>
       )}
     </div>

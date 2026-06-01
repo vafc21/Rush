@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
+import { pts } from "@/lib/format";
 import {
   POOL_SIZE,
   MIN_PICKS,
@@ -48,11 +49,11 @@ export function KenoGame({
     }
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Minimum bet is ${pts(MIN_BET_CENTS)} pts`);
       return false;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per draw`);
+      setError(`Max bet is ${pts(MAX_BET_CENTS)} pts per draw`);
       return false;
     }
     if (betCents > balanceCents) {
@@ -146,7 +147,7 @@ export function KenoGame({
           <p className="text-[10px] text-muted">
             Max{" "}
             <span className="tabular-nums text-secondary">
-              ${(MAX_BET_CENTS / 100).toFixed(0)}
+              {pts(MAX_BET_CENTS)} pts
             </span>
           </p>
         </div>
@@ -216,8 +217,8 @@ export function KenoGame({
           </div>
           <div>
             {last.payoutCents >= last.betCents
-              ? `+$${((last.payoutCents - last.betCents) / 100).toFixed(2)}`
-              : `-$${((last.betCents - last.payoutCents) / 100).toFixed(2)}`}
+              ? `+${pts(last.payoutCents - last.betCents)} pts`
+              : `-${pts(last.betCents - last.payoutCents)} pts`}
           </div>
         </div>
       )}

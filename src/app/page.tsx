@@ -38,8 +38,8 @@ export default function Landing() {
         <h1 className="text-4xl font-black tracking-widest">RUSH</h1>
       </div>
       <p className="max-w-md text-center text-secondary">
-        Beat your friends at fake-money casino games. $1,000 each, X minutes,
-        highest balance wins.
+        Beat your friends at fake-money casino games. 1,000 points each,
+        X minutes, highest balance wins.
       </p>
       <div className="flex w-full max-w-xs flex-col gap-3">
         <Link

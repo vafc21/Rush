@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/TopBar";
+import { pts } from "@/lib/format";
 
 type Stats = {
   username: string;
@@ -87,23 +88,23 @@ export default function ProfilePage() {
               />
               <Stat
                 label="Biggest single win"
-                value={`$${(stats.biggestSingleWinCents / 100).toFixed(2)}`}
+                value={`${pts(stats.biggestSingleWinCents)} pts`}
                 accent
               />
               <Stat
                 label="Biggest end balance"
-                value={`$${(stats.biggestLobbyFinishCents / 100).toFixed(2)}`}
+                value={`${pts(stats.biggestLobbyFinishCents)} pts`}
                 accent
               />
               <Stat
                 label="Lifetime P / L"
-                value={`${stats.lifetimeProfitCents >= 0 ? "+" : "−"}$${Math.abs(stats.lifetimeProfitCents / 100).toFixed(2)}`}
+                value={`${stats.lifetimeProfitCents >= 0 ? "+" : "−"}${pts(Math.abs(stats.lifetimeProfitCents))} pts`}
                 accent={stats.lifetimeProfitCents >= 0}
                 danger={stats.lifetimeProfitCents < 0}
               />
               <Stat
                 label="Biggest bet"
-                value={`$${(stats.biggestBetCents / 100).toFixed(2)}`}
+                value={`${pts(stats.biggestBetCents)} pts`}
               />
             </div>
           </>

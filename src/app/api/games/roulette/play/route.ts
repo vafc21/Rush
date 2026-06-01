@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { spinRoulette, settle, colorOf, Bet } from "@/lib/games/roulette";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
+import { pts } from "@/lib/format";
 import { publishLobby } from "@/lib/realtime/pusher-server";
 import { maybeBustPlayer } from "@/lib/games/bust";
 
@@ -49,13 +50,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid bet" }, { status: 400 });
     }
     if (!Number.isInteger(b.amountCents) || b.amountCents < 100) {
-      return NextResponse.json({ error: "bet < $1" }, { status: 400 });
+      return NextResponse.json({ error: "bet < 1 pt" }, { status: 400 });
     }
     total += b.amountCents;
   }
   if (total < MIN_BET_CENTS || total > MAX_BET_CENTS) {
     return NextResponse.json(
-      { error: `total bets must be $${MIN_BET_CENTS / 100}-$${MAX_BET_CENTS / 100}` },
+      { error: `total bets must be ${pts(MIN_BET_CENTS)}-${pts(MAX_BET_CENTS)} pts` },
       { status: 400 }
     );
   }

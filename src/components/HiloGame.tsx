@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card, Direction } from "@/lib/games/hilo";
+import { pts } from "@/lib/format";
 
 const RANK_LABELS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
@@ -70,11 +71,11 @@ export function HiloGame({
   async function start() {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Minimum bet is ${pts(MIN_BET_CENTS)} pts`);
       return;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per game`);
+      setError(`Max bet is ${pts(MAX_BET_CENTS)} pts per game`);
       return;
     }
     if (betCents > balanceCents) {
@@ -187,7 +188,7 @@ export function HiloGame({
             </span>{" "}
             ·{" "}
             <span className="tabular-nums text-white">
-              ${(potentialPayout / 100).toFixed(2)}
+              {pts(potentialPayout)} pts
             </span>
           </div>
         )}
@@ -204,7 +205,7 @@ export function HiloGame({
               <p className="text-[10px] text-muted">
                 Max{" "}
                 <span className="tabular-nums text-secondary">
-                  ${(MAX_BET_CENTS / 100).toFixed(0)}
+                  {pts(MAX_BET_CENTS)} pts
                 </span>
               </p>
             </div>
@@ -277,7 +278,7 @@ export function HiloGame({
 
           {game.status === "playing" && game.rawMultiplier > 1 && (
             <Button onClick={cashout} disabled={busy} className="w-full">
-              Cash Out ${(potentialPayout / 100).toFixed(2)}
+              Cash Out {pts(potentialPayout)} pts
             </Button>
           )}
 
@@ -285,7 +286,7 @@ export function HiloGame({
             <div className="space-y-2 rounded-md bg-red-500/10 px-3 py-3 text-center">
               <p className="text-2xl font-black text-red-300">Wrong</p>
               <p className="text-sm text-red-300">
-                Lost ${(game.betCents / 100).toFixed(2)}
+                Lost {pts(game.betCents)} pts
               </p>
               <button
                 onClick={reset}
@@ -298,7 +299,7 @@ export function HiloGame({
           {game.status === "cashed" && lastPayout !== null && (
             <div className="space-y-2 rounded-md bg-accent/10 px-3 py-3 text-center">
               <p className="text-2xl font-black text-accent">
-                +${(lastPayout / 100).toFixed(2)}
+                +{pts(lastPayout)} pts
               </p>
               <p className="text-sm text-accent/80">
                 Cashed at {game.cashoutMultiplier.toFixed(2)}x

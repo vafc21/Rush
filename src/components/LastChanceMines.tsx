@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { pts } from "@/lib/format";
 
 const TILES = 25;
 const COOLDOWN_MS = 5_000;
@@ -87,7 +88,7 @@ export function LastChanceMines({
         <p className="text-xs uppercase tracking-widest text-muted">Last Chance</p>
         <h2 className="text-xl font-black text-brand">Mines</h2>
         <p className="mt-1 text-xs text-secondary">
-          Pick the one safe tile. 1 in {TILES} for a $500 rebuy.
+          Pick the one safe tile. 1 in {TILES} for a 500 pts rebuy.
         </p>
       </div>
 
@@ -133,7 +134,7 @@ export function LastChanceMines({
       )}
       {result?.won && (
         <div className="rounded-md bg-accent/10 px-3 py-3 text-sm font-bold text-accent">
-          You found it! +${(result.rebuyCents / 100).toFixed(2)} — back in the game.
+          You found it! +{pts(result.rebuyCents)} pts — back in the game.
         </div>
       )}
       {result && !result.won && (

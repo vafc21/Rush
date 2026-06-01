@@ -8,6 +8,7 @@ import {
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { useLobbyChannel } from "@/lib/realtime/pusher-client";
 import type { LobbyEvent } from "@/lib/realtime/events";
+import { pts, ptsFromUnits } from "@/lib/format";
 
 type Phase = "waiting" | "betting" | "running" | "aftermath";
 
@@ -180,11 +181,11 @@ export function CrashGame({
     if (!round || phase !== "betting") return;
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
     if (!betCents || betCents < MIN_BET_CENTS) {
-      setError(`Minimum bet is $${(MIN_BET_CENTS / 100).toFixed(2)}`);
+      setError(`Minimum bet is ${pts(MIN_BET_CENTS)} pts`);
       return;
     }
     if (betCents > MAX_BET_CENTS) {
-      setError(`Max bet is $${(MAX_BET_CENTS / 100).toFixed(0)} per round`);
+      setError(`Max bet is ${pts(MAX_BET_CENTS)} pts per round`);
       return;
     }
     if (betCents > balanceCents) {
@@ -398,7 +399,7 @@ export function CrashGame({
               <p className="text-[10px] text-muted">
                 Max{" "}
                 <span className="tabular-nums text-secondary">
-                  ${(MAX_BET_CENTS / 100).toFixed(0)}
+                  {pts(MAX_BET_CENTS)} pts
                 </span>{" "}
                 / round
               </p>
@@ -490,7 +491,7 @@ export function CrashGame({
             {phase === "betting"
               ? busy
                 ? "Placing…"
-                : `Bet $${betDollars}`
+                : `Bet ${ptsFromUnits(parseFloat(betDollars || "0") || 0)} pts`
               : "Waiting for next round…"}
           </Button>
         </>
@@ -503,26 +504,26 @@ export function CrashGame({
           disabled={busy}
           className="w-full text-base"
         >
-          Cash Out · $
-          {(Math.floor(myBet.betCents * currentMultiplier) / 100).toFixed(2)}
+          Cash Out ·{" "}
+          {pts(Math.floor(myBet.betCents * currentMultiplier))} pts
         </Button>
       )}
 
       {/* Result panels */}
       {myBet?.status === "cashed" && (
         <div className="rounded-md bg-accent/10 px-3 py-2 text-center text-sm font-bold text-accent">
-          Cashed at {myBet.cashedAt?.toFixed(2)}x · +$
-          {(Math.floor(myBet.betCents * (myBet.cashedAt ?? 1)) / 100).toFixed(2)}
+          Cashed at {myBet.cashedAt?.toFixed(2)}x · +
+          {pts(Math.floor(myBet.betCents * (myBet.cashedAt ?? 1)))} pts
         </div>
       )}
       {myBet?.status === "lost" && (
         <div className="rounded-md bg-red-500/10 px-3 py-2 text-center text-sm font-bold text-red-300">
-          Crashed at {round?.crashAt.toFixed(2)}x · –${(myBet.betCents / 100).toFixed(2)}
+          Crashed at {round?.crashAt.toFixed(2)}x · –{pts(myBet.betCents)} pts
         </div>
       )}
       {phase === "betting" && myBet?.status === "pending" && (
         <div className="rounded-md bg-bg/40 px-3 py-2 text-center text-xs text-muted">
-          Bet of ${(myBet.betCents / 100).toFixed(2)} placed — waiting for liftoff
+          Bet of {pts(myBet.betCents)} pts placed — waiting for liftoff
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { pts } from "@/lib/format";
 
 const SEGMENTS = 50;
 const SEGMENT_DEG = 360 / SEGMENTS;
@@ -109,7 +110,7 @@ export function LastChanceWheel({
           🎡 Wheel
         </h2>
         <p className="mt-1 text-xs text-secondary">
-          Land on gold for a $500 rebuy. 1 / {SEGMENTS} per spin.
+          Land on gold for a 500 pts rebuy. 1 / {SEGMENTS} per spin.
         </p>
       </div>
 
@@ -204,7 +205,7 @@ export function LastChanceWheel({
           }`}
         >
           {last.won
-            ? `🎉 You won! +$${(last.rebuyCents / 100).toFixed(2)} — back in the game.`
+            ? `🎉 You won! +${pts(last.rebuyCents)} pts — back in the game.`
             : "No luck. Try again in 20s."}
         </div>
       )}

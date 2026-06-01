@@ -8,6 +8,7 @@ import {
 } from "@/lib/games/dragontower";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 type DragonTowerDetails = {
   difficulty: Difficulty;
@@ -135,6 +136,8 @@ export async function climbTower(input: ClimbInput): Promise<ClimbResult> {
   if (input.tileIndex === dragonIndex) {
     const nextDetails: DragonTowerDetails = { ...details, status: "burned" };
     await supabase.from("bets").update({ details: nextDetails }).eq("id", bet.id);
+    // The stake was deducted at start; burning may bust the player.
+    await maybeBustPlayer(bet.lobby_id, input.lobbyPlayerId);
     return {
       burned: true,
       rowsClimbed: currentRow,

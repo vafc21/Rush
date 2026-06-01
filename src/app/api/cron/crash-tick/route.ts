@@ -5,6 +5,7 @@ import {
   secondsToReachMultiplier,
 } from "@/lib/games/crash";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 /**
  * Runs once a minute on Vercel cron (and on-demand from the CrashGame
@@ -187,9 +188,12 @@ async function finalizeRound(
         payoutCents,
       });
     } else {
-      // Lost the bet (no autoCashout, or autoCashout above crashAt)
+      // Lost the bet (no autoCashout, or autoCashout above crashAt). The
+      // stake was deducted when the bet was placed, so this is the moment
+      // the loss is realized — check whether it busted the player.
       const nextDetails: CrashBetDetails = { ...details, status: "lost" };
       await supabase.from("bets").update({ details: nextDetails }).eq("id", bet.id);
+      await maybeBustPlayer(lobbyId, bet.lobby_player_id);
     }
   }
 

@@ -125,11 +125,17 @@ export default function LobbyPage() {
                 ? {
                     ...p,
                     balance_cents: e.balanceCents,
-                    // Rule (mirrors server-side bust check in dice handler):
-                    // balance < $1 = busted. Re-deriving here lets a Last
-                    // Chance Wheel win lift the busted flag without needing
-                    // a separate pusher event.
-                    is_busted: e.balanceCents < 100,
+                    // Only *clear* the busted flag here, on recovery (a Last
+                    // Chance win crediting the balance back above the minimum
+                    // bet). We must NOT *set* busted from a low balance: games
+                    // that deduct a still-pending wager (e.g. a Crash bet
+                    // before the round resolves) broadcast a momentary sub-$1
+                    // balance, and inferring "busted" from it would wrongly
+                    // kick the player into the Last Chance zone mid-round
+                    // while the server still considers them un-busted. The
+                    // authoritative `player_busted` event is the only signal
+                    // that sets the flag.
+                    is_busted: e.balanceCents >= 100 ? false : p.is_busted,
                   }
                 : p
             ),

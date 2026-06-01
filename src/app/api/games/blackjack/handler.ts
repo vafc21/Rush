@@ -9,6 +9,7 @@ import {
 } from "@/lib/games/blackjack";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 type BlackjackDetails = {
   player: Card[];
@@ -104,6 +105,12 @@ export async function startBlackjack(input: StartInput): Promise<StartResult> {
     lobbyPlayerId: input.lobbyPlayerId,
     balanceCents: finalBalance,
   });
+
+  // A natural that settled as a loss/push may leave the player busted. A
+  // hand still in progress is a pending wager — never bust mid-hand.
+  if (status === "settled") {
+    await maybeBustPlayer(pl.lobby_id, input.lobbyPlayerId, finalBalance);
+  }
 
   return {
     betId: bet.id,
@@ -223,6 +230,8 @@ export async function performAction(input: ActionInput): Promise<ActionResult> {
       lobbyPlayerId: input.lobbyPlayerId,
       balanceCents: newBal,
     });
+    // The hand has settled; a loss may bust the player.
+    await maybeBustPlayer(bet.lobby_id, input.lobbyPlayerId, newBal);
   }
 
   return {

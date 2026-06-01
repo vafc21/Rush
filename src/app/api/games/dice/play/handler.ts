@@ -2,6 +2,7 @@ import { getServiceSupabase } from "@/lib/db/supabase";
 import { diceOutcome, MIN_ROLL_UNDER, MAX_ROLL_UNDER } from "@/lib/games/dice";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 export type DiceBetInput = {
   lobbyPlayerId: string;
@@ -74,15 +75,7 @@ export async function placeDiceBet(input: DiceBetInput): Promise<DiceBetResult> 
   });
 
   // Bust check
-  if (finalBalance < 100) {
-    await supabase.from("lobby_players")
-      .update({ is_busted: true })
-      .eq("id", input.lobbyPlayerId);
-    await publishLobby(player.lobby_id, {
-      type: "player_busted",
-      lobbyPlayerId: input.lobbyPlayerId,
-    });
-  }
+  await maybeBustPlayer(player.lobby_id, input.lobbyPlayerId, finalBalance);
 
   return {
     won: outcome.won,

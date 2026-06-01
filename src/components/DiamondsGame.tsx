@@ -2,9 +2,12 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Gem } from "@/lib/games/diamonds";
 import { pts } from "@/lib/format";
+
+const DEFAULT_GEMS = ["🟡", "🟢", "🔵", "🟣", "🟠"] as Gem[];
 
 type Result = {
   hand: Gem[];
@@ -63,16 +66,28 @@ export function DiamondsGame({
     <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6">
       <h2 className="text-lg font-bold">💎 Diamonds</h2>
 
-      <div className="grid grid-cols-5 gap-2">
-        {(last?.hand ?? ["🟡", "🟢", "🔵", "🟣", "🟠"] as Gem[]).map((g, i) => {
+      <div className="relative grid grid-cols-5 gap-2">
+        <WinBurst
+          trigger={last?.cluster ? `${last.cluster.gem}-${last.cluster.size}` : false}
+          intensity={last?.cluster && last.cluster.size >= 4 ? 1.8 : 1}
+        />
+        {(last?.hand ?? DEFAULT_GEMS).map((g, i) => {
           const isInCluster = last?.cluster && last.cluster.gem === g;
+          // After a deal, each gem slides into place with a stagger so the
+          // hand "deals out". Transform-only (see rush-deal) so a gem is
+          // never left blank if the animation stalls. The key includes the
+          // round so React remounts and replays the deal each round.
           return (
             <div
-              key={i}
+              key={`${last ? "r" : "d"}-${i}`}
               className={`flex aspect-square items-center justify-center rounded-md bg-bg text-4xl ${
-                isInCluster ? "ring-2 ring-accent scale-105" : ""
+                isInCluster ? "ring-2 ring-accent" : ""
               }`}
-              style={isInCluster ? { animation: "rush-pop 250ms ease-out" } : undefined}
+              style={
+                last
+                  ? { animation: "rush-deal 300ms ease-out both", animationDelay: `${i * 70}ms` }
+                  : undefined
+              }
             >
               {g}
             </div>

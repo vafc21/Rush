@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { pts } from "@/lib/format";
 import {
@@ -90,12 +91,19 @@ export function KenoGame({
       </div>
 
       {/* 8×5 grid of numbers 1-40 */}
-      <div className="grid grid-cols-8 gap-1">
+      <div className="relative grid grid-cols-8 gap-1">
+        <WinBurst
+          trigger={last && last.payoutCents > last.betCents ? `${last.drawn.join("")}` : false}
+          intensity={last && last.payoutCents > last.betCents * 5 ? 1.8 : 1}
+        />
         {Array.from({ length: POOL_SIZE }, (_, i) => {
           const n = i + 1;
           const isPicked = picks.includes(n);
           const isMatched = last && last.matched.includes(n);
           const isDrawn = last && last.drawn.includes(n);
+          // Position in the draw order — used to light the balls up one by
+          // one for a suspenseful reveal instead of all at once.
+          const drawIdx = last ? last.drawn.indexOf(n) : -1;
           let cls = "bg-bg text-secondary hover:bg-accent/20 cursor-pointer";
           if (last) {
             cls = "bg-bg/40 text-muted/50 cursor-default";
@@ -111,7 +119,14 @@ export function KenoGame({
               disabled={busy || last !== null}
               onClick={() => togglePick(n)}
               className={`h-10 rounded-md text-sm font-bold tabular-nums transition-all active:scale-95 ${cls}`}
-              style={isMatched ? { animation: "rush-pop 250ms ease-out" } : undefined}
+              style={
+                drawIdx >= 0
+                  ? {
+                      animation: "rush-pop 280ms ease-out both",
+                      animationDelay: `${drawIdx * 55}ms`,
+                    }
+                  : undefined
+              }
             >
               {n}
             </button>

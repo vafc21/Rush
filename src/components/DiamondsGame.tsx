@@ -28,6 +28,8 @@ export function DiamondsGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<Result | null>(null);
+  // Cluster result is shown only after the gems finish dealing.
+  const [revealed, setRevealed] = useState(false);
 
   async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
@@ -45,20 +47,25 @@ export function DiamondsGame({
     }
     setBusy(true);
     setError(null);
+    setRevealed(false);
     setLast(null);
     const res = await fetch("/api/games/diamonds/play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lobbyId, betCents }),
     });
-    setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "deal failed");
+      setBusy(false);
       return false;
     }
     const data = await res.json();
     setLast({ ...data, betCents });
+    // Let the gems deal out before revealing the cluster result.
+    await new Promise((r) => setTimeout(r, 700));
+    setRevealed(true);
+    setBusy(false);
     return true;
   }
 
@@ -68,11 +75,11 @@ export function DiamondsGame({
 
       <div className="relative grid grid-cols-5 gap-2">
         <WinBurst
-          trigger={last?.cluster ? `${last.cluster.gem}-${last.cluster.size}` : false}
+          trigger={revealed && last?.cluster ? `${last.cluster.gem}-${last.cluster.size}` : false}
           intensity={last?.cluster && last.cluster.size >= 4 ? 1.8 : 1}
         />
         {(last?.hand ?? DEFAULT_GEMS).map((g, i) => {
-          const isInCluster = last?.cluster && last.cluster.gem === g;
+          const isInCluster = revealed && last?.cluster && last.cluster.gem === g;
           // After a deal, each gem slides into place with a stagger so the
           // hand "deals out". Transform-only (see rush-deal) so a gem is
           // never left blank if the animation stalls. The key includes the
@@ -127,7 +134,7 @@ export function DiamondsGame({
       </Button>
       <AutoBet onPlay={play} pauseMs={200} />
       {error && <p className="text-sm text-red-400">{error}</p>}
-      {last && (
+      {last && revealed && (
         <div
           className={`rounded-md px-3 py-2 text-center text-sm font-bold ${
             last.multiplier > 0

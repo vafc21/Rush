@@ -32,6 +32,8 @@ export function KenoGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<LastDraw | null>(null);
+  // Match result is shown only after the balls finish lighting up.
+  const [revealed, setRevealed] = useState(false);
 
   function togglePick(n: number) {
     if (busy) return;
@@ -63,19 +65,24 @@ export function KenoGame({
     }
     setBusy(true);
     setError(null);
+    setRevealed(false);
     const res = await fetch("/api/games/keno/play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lobbyId, betCents, picks }),
     });
-    setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "play failed");
+      setBusy(false);
       return false;
     }
     const data = (await res.json()) as Omit<LastDraw, "betCents">;
     setLast({ ...data, betCents });
+    // Wait for the balls to finish lighting up before showing the result.
+    await new Promise((r) => setTimeout(r, 850));
+    setRevealed(true);
+    setBusy(false);
     return true;
   }
 
@@ -93,7 +100,7 @@ export function KenoGame({
       {/* 8×5 grid of numbers 1-40 */}
       <div className="relative grid grid-cols-8 gap-1">
         <WinBurst
-          trigger={last && last.payoutCents > last.betCents ? `${last.drawn.join("")}` : false}
+          trigger={revealed && last && last.payoutCents > last.betCents ? `${last.drawn.join("")}` : false}
           intensity={last && last.payoutCents > last.betCents * 5 ? 1.8 : 1}
         />
         {Array.from({ length: POOL_SIZE }, (_, i) => {
@@ -219,7 +226,7 @@ export function KenoGame({
       />
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      {last && (
+      {last && revealed && (
         <div
           className={`space-y-1 rounded-md px-3 py-2 text-center text-sm font-semibold ${
             last.payoutCents > 0

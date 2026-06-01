@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
@@ -72,6 +72,19 @@ export function BlackjackGame({
   const [game, setGame] = useState<Game | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Win/loss panel is shown only after the hand has settled AND the
+  // dealer's cards have finished dealing in — not before.
+  const [revealed, setRevealed] = useState(false);
+
+  const settled = game?.status === "settled";
+  useEffect(() => {
+    if (!settled) {
+      setRevealed(false);
+      return;
+    }
+    const t = setTimeout(() => setRevealed(true), 600);
+    return () => clearTimeout(t);
+  }, [settled, game?.betId]);
 
   async function start() {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
@@ -197,7 +210,7 @@ export function BlackjackGame({
         <div className="relative space-y-4">
           <WinBurst
             trigger={
-              game.status === "settled" && won ? `${game.result}-${game.betId}` : false
+              revealed && won ? `${game.result}-${game.betId}` : false
             }
             intensity={game.result === "player_blackjack" ? 1.8 : 1}
           />
@@ -256,7 +269,7 @@ export function BlackjackGame({
             </div>
           )}
 
-          {game.status === "settled" && (
+          {game.status === "settled" && revealed && (
             <div
               className={`space-y-2 rounded-md px-3 py-3 text-center text-sm font-bold ${
                 (game.payoutCents ?? 0) >= game.betCents * (game.doubled ? 2 : 1)

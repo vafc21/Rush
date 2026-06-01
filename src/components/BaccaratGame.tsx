@@ -53,6 +53,9 @@ export function BaccaratGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hand, setHand] = useState<Hand | null>(null);
+  // Result (winner banner + burst) is only shown once the cards finish
+  // dealing — never before the animation completes.
+  const [revealed, setRevealed] = useState(false);
 
   async function play(): Promise<boolean> {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
@@ -70,20 +73,25 @@ export function BaccaratGame({
     }
     setBusy(true);
     setError(null);
+    setRevealed(false);
     setHand(null);
     const res = await fetch("/api/games/baccarat/play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lobbyId, betCents, side }),
     });
-    setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "deal failed");
+      setBusy(false);
       return false;
     }
     const data = await res.json();
     setHand({ ...data, betCents, side });
+    // Let the cards deal out before revealing who won.
+    await new Promise((r) => setTimeout(r, 750));
+    setRevealed(true);
+    setBusy(false);
     return true;
   }
 
@@ -94,7 +102,7 @@ export function BaccaratGame({
       {hand && (
         <div className="relative space-y-2">
           <WinBurst
-            trigger={hand.won ? `${hand.winner}-${hand.playerTotal}-${hand.bankerTotal}` : false}
+            trigger={revealed && hand.won ? `${hand.winner}-${hand.playerTotal}-${hand.bankerTotal}` : false}
             intensity={hand.side === "tie" && hand.won ? 1.8 : 1}
           />
           <div>
@@ -117,16 +125,18 @@ export function BaccaratGame({
               ))}
             </div>
           </div>
-          <div
-            className={`rounded-md px-3 py-2 text-center text-sm font-bold ${
-              hand.won ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-300"
-            }`}
-          >
-            {hand.winner} won ·{" "}
-            {hand.won
-              ? `+${pts(hand.payoutCents - hand.betCents)} pts`
-              : `-${pts(hand.betCents)} pts`}
-          </div>
+          {revealed && (
+            <div
+              className={`rounded-md px-3 py-2 text-center text-sm font-bold ${
+                hand.won ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-300"
+              }`}
+            >
+              {hand.winner} won ·{" "}
+              {hand.won
+                ? `+${pts(hand.payoutCents - hand.betCents)} pts`
+                : `-${pts(hand.betCents)} pts`}
+            </div>
+          )}
         </div>
       )}
 

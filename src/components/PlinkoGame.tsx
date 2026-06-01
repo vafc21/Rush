@@ -55,6 +55,8 @@ type Ball = {
   settledAtMs: number | null;
   multiplier: number;
   betCents: number;
+  payoutCents: number;
+  banked: boolean;      // whether this ball's result has been revealed yet
 };
 
 function pegPos(row: number, col: number): { x: number; y: number } {
@@ -181,6 +183,17 @@ export function PlinkoGame({
               b.settledAtMs = t;
               b.x = targetX;
               slotFlashRef.current.set(b.slot, t);
+              // Reveal the win/loss only now that the ball has landed —
+              // never before the drop animation finishes.
+              if (!b.banked) {
+                b.banked = true;
+                setLastBank({
+                  multiplier: b.multiplier,
+                  slot: b.slot,
+                  payoutCents: b.payoutCents,
+                  betCents: b.betCents,
+                });
+              }
             }
           }
         }
@@ -213,6 +226,15 @@ export function PlinkoGame({
             b.nextRow = ROWS;
             b.settledAtMs = t;
             slotFlashRef.current.set(b.slot, t);
+            if (!b.banked) {
+              b.banked = true;
+              setLastBank({
+                multiplier: b.multiplier,
+                slot: b.slot,
+                payoutCents: b.payoutCents,
+                betCents: b.betCents,
+              });
+            }
           }
         }
       }
@@ -293,13 +315,12 @@ export function PlinkoGame({
       settledAtMs: null,
       multiplier: data.multiplier,
       betCents,
-    });
-    setLastBank({
-      multiplier: data.multiplier,
-      slot: data.slot,
       payoutCents: data.payoutCents,
-      betCents,
+      banked: false,
     });
+    // Note: we DON'T reveal the result here — setLastBank fires when the
+    // ball actually lands (see the settle handler), so the player isn't
+    // told what they won/lost before the drop animation finishes.
     return true;
   }, [betDollars, risk, lobbyId, balanceCents]);
 

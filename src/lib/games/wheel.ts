@@ -16,32 +16,49 @@ export const SEGMENTS = 50;
 
 export type Risk = "low" | "medium" | "high";
 
+/**
+ * Per-segment multipliers (0x = a losing slot). Each table is tuned so
+ * the mean multiplier is just under 1.0 — i.e. the player loses a small
+ * edge over time (~98-99% RTP), the way a real casino wheel works. Every
+ * risk level has genuine 0x losing segments; higher risk = more losing
+ * slots traded for bigger top multipliers.
+ *
+ *   low    20/50 lose (mean 0.99)  — low volatility, frequent 1.5x
+ *   medium 25/50 lose (mean 0.99)  — 50/50, top 3x
+ *   high   40/50 lose (mean 0.98)  — 80% lose, top 22x
+ */
+function buildTable(spec: Array<[count: number, multiplier: number]>): number[] {
+  const arr: number[] = [];
+  for (const [count, multiplier] of spec) {
+    for (let i = 0; i < count; i++) arr.push(multiplier);
+  }
+  if (arr.length !== SEGMENTS) {
+    throw new Error(`wheel table has ${arr.length} segments, expected ${SEGMENTS}`);
+  }
+  return arr;
+}
+
 const TABLES: Record<Risk, number[]> = {
-  // Sums chosen so mean ≈ 1.0 → ~100% pre-edge → apply RTP factor on the
-  // wheel's "stop" probability distribution by occasionally hitting 0x.
-  // Hand-tuned for variety and ~99% RTP.
-  low: ((): number[] => {
-    const arr = new Array(SEGMENTS).fill(0);
-    // 40 winning slots × 1.2x, 8 slots × 1.5x, 2 slots × 0x
-    for (let i = 0; i < 40; i++) arr[i] = 1.2;
-    for (let i = 40; i < 48; i++) arr[i] = 1.5;
-    return arr;
-  })(),
-  medium: ((): number[] => {
-    const arr = new Array(SEGMENTS).fill(0);
-    for (let i = 0; i < 30; i++) arr[i] = 1.5;
-    for (let i = 30; i < 40; i++) arr[i] = 1.7;
-    for (let i = 40; i < 47; i++) arr[i] = 2;
-    for (let i = 47; i < 49; i++) arr[i] = 3;
-    arr[49] = 4;
-    return arr;
-  })(),
-  high: ((): number[] => {
-    const arr = new Array(SEGMENTS).fill(0);
-    for (let i = 0; i < 5; i++) arr[i] = 9.9;
-    for (let i = 5; i < 14; i++) arr[i] = 2;
-    return arr;
-  })(),
+  // sum = 49.5 → mean 0.99
+  low: buildTable([
+    [20, 0],
+    [27, 1.5],
+    [3, 3],
+  ]),
+  // sum = 49.5 → mean 0.99
+  medium: buildTable([
+    [25, 0],
+    [15, 2],
+    [7, 1.5],
+    [3, 3],
+  ]),
+  // sum = 49 → mean 0.98
+  high: buildTable([
+    [40, 0],
+    [6, 2],
+    [3, 5],
+    [1, 22],
+  ]),
 };
 
 export function segmentsFor(risk: Risk): number[] {

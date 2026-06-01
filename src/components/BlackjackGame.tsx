@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button } from "./Button";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card, evaluate } from "@/lib/games/blackjack";
 import { pts } from "@/lib/format";
@@ -23,16 +24,35 @@ function suitColor(s: string) {
   return s === "♥" || s === "♦" ? "text-red-400" : "text-white";
 }
 
-function CardView({ card, hidden }: { card?: Card; hidden?: boolean }) {
+function CardView({
+  card,
+  hidden,
+  index = 0,
+}: {
+  card?: Card;
+  hidden?: boolean;
+  index?: number;
+}) {
+  // Stagger the opening deal but cap it so single-card hits don't lag.
+  const dealStyle = {
+    animation: "rush-deal 320ms ease-out both",
+    animationDelay: `${Math.min(index, 2) * 80}ms`,
+  };
   if (hidden || !card) {
     return (
-      <div className="flex h-20 w-14 items-center justify-center rounded-md border border-panel bg-bg/60">
+      <div
+        className="flex h-20 w-14 items-center justify-center rounded-md border border-panel bg-bg/60"
+        style={dealStyle}
+      >
         <div className="h-12 w-10 rounded bg-gradient-to-br from-brand to-accent opacity-60" />
       </div>
     );
   }
   return (
-    <div className="flex h-20 w-14 flex-col items-center justify-center rounded-md border border-panel bg-bg p-1">
+    <div
+      className="flex h-20 w-14 flex-col items-center justify-center rounded-md border border-panel bg-bg p-1"
+      style={dealStyle}
+    >
       <span className={`text-xl font-black tabular-nums ${suitColor(card.suit)}`}>
         {RANK_LABELS[card.rank - 1]}
       </span>
@@ -131,6 +151,8 @@ export function BlackjackGame({
 
   const playerEval = game ? evaluate(game.player) : null;
   const dealerEval = game?.dealer ? evaluate(game.dealer) : null;
+  const effectiveBet = game ? game.betCents * (game.doubled ? 2 : 1) : 0;
+  const won = game ? (game.payoutCents ?? 0) > effectiveBet : false;
 
   return (
     <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6">
@@ -172,7 +194,13 @@ export function BlackjackGame({
       )}
 
       {game && (
-        <>
+        <div className="relative space-y-4">
+          <WinBurst
+            trigger={
+              game.status === "settled" && won ? `${game.result}-${game.betId}` : false
+            }
+            intensity={game.result === "player_blackjack" ? 1.8 : 1}
+          />
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-wider text-muted">
               Dealer{" "}
@@ -181,10 +209,12 @@ export function BlackjackGame({
               )}
             </p>
             <div className="flex gap-1.5">
-              <CardView card={game.dealerVisible} />
+              <CardView card={game.dealerVisible} index={0} />
               {game.dealer
-                ? game.dealer.slice(1).map((c, i) => <CardView key={i} card={c} />)
-                : <CardView hidden />}
+                ? game.dealer
+                    .slice(1)
+                    .map((c, i) => <CardView key={i} card={c} index={i + 1} />)
+                : <CardView hidden index={1} />}
             </div>
           </div>
 
@@ -196,7 +226,7 @@ export function BlackjackGame({
               )}
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {game.player.map((c, i) => <CardView key={i} card={c} />)}
+              {game.player.map((c, i) => <CardView key={i} card={c} index={i} />)}
             </div>
           </div>
 
@@ -249,7 +279,7 @@ export function BlackjackGame({
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}

@@ -58,6 +58,21 @@ html, body {
   }
 }
 
+/* Card "deal in": slides up + settles. Transform-only (no opacity fade)
+   so a card is never left invisible if the animation timeline stalls
+   (e.g. a backgrounded/throttled tab) — it just animates into place. */
+@keyframes rush-deal {
+  0% {
+    transform: translateY(18px) scale(0.8) rotate(-6deg);
+  }
+  65% {
+    transform: translateY(-3px) scale(1.03) rotate(1deg);
+  }
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
 @keyframes rush-float {
   0% {
     transform: translate(-50%, 0) scale(0.6);

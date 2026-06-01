@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { AutoBet } from "./AutoBet";
+import { WinBurst } from "./WinBurst";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { Card } from "@/lib/games/baccarat";
 import { pts } from "@/lib/format";
@@ -26,9 +27,12 @@ function suitColor(s: string) {
   return s === "♥" || s === "♦" ? "text-red-400" : "text-white";
 }
 
-function CardView({ card }: { card: Card }) {
+function CardView({ card, index = 0 }: { card: Card; index?: number }) {
   return (
-    <div className="flex h-16 w-11 flex-col items-center justify-center rounded-md border border-panel bg-bg p-1">
+    <div
+      className="flex h-16 w-11 flex-col items-center justify-center rounded-md border border-panel bg-bg p-1"
+      style={{ animation: "rush-deal 320ms ease-out both", animationDelay: `${index * 90}ms` }}
+    >
       <span className={`text-base font-black tabular-nums ${suitColor(card.suit)}`}>
         {RANK_LABELS[card.rank - 1]}
       </span>
@@ -88,18 +92,30 @@ export function BaccaratGame({
       <h2 className="text-lg font-bold">♠ Baccarat</h2>
 
       {hand && (
-        <div className="space-y-2">
+        <div className="relative space-y-2">
+          <WinBurst
+            trigger={hand.won ? `${hand.winner}-${hand.playerTotal}-${hand.bankerTotal}` : false}
+            intensity={hand.side === "tie" && hand.won ? 1.8 : 1}
+          />
           <div>
             <p className="mb-1 text-xs uppercase tracking-wider text-muted">
               Player <span className="ml-1 tabular-nums text-white">{hand.playerTotal}</span>
             </p>
-            <div className="flex gap-1.5">{hand.player.map((c, i) => <CardView key={i} card={c} />)}</div>
+            <div className="flex gap-1.5">
+              {hand.player.map((c, i) => (
+                <CardView key={i} card={c} index={i} />
+              ))}
+            </div>
           </div>
           <div>
             <p className="mb-1 text-xs uppercase tracking-wider text-muted">
               Banker <span className="ml-1 tabular-nums text-white">{hand.bankerTotal}</span>
             </p>
-            <div className="flex gap-1.5">{hand.banker.map((c, i) => <CardView key={i} card={c} />)}</div>
+            <div className="flex gap-1.5">
+              {hand.banker.map((c, i) => (
+                <CardView key={i} card={c} index={hand.player.length + i} />
+              ))}
+            </div>
           </div>
           <div
             className={`rounded-md px-3 py-2 text-center text-sm font-bold ${

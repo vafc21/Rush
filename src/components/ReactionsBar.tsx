@@ -1,21 +1,27 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const EMOJIS = ["🔥", "😱", "💀", "🚀"] as const;
+const COOLDOWN_MS = 1500;
 
 export function ReactionsBar({ lobbyId }: { lobbyId: string }) {
-  const [cooldown, setCooldown] = useState<string | null>(null);
+  const [onCooldown, setOnCooldown] = useState(false);
+  // Guards against rapid double-fires before the cooldown state flips.
+  const lastSentRef = useRef(0);
 
   async function send(emoji: string) {
-    if (cooldown) return;
-    setCooldown(emoji);
+    const now = Date.now();
+    if (now - lastSentRef.current < COOLDOWN_MS) return;
+    lastSentRef.current = now;
+    // Global cooldown — disables ALL emoji buttons, not just this one,
+    // so people can't spam-flood by alternating reactions.
+    setOnCooldown(true);
+    setTimeout(() => setOnCooldown(false), COOLDOWN_MS);
     await fetch(`/api/lobbies/${lobbyId}/react`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emoji }),
     }).catch(() => {});
-    // brief per-button cooldown so people can't spam-flood
-    setTimeout(() => setCooldown(null), 350);
   }
 
   return (
@@ -24,8 +30,8 @@ export function ReactionsBar({ lobbyId }: { lobbyId: string }) {
         <button
           key={e}
           onClick={() => send(e)}
-          disabled={cooldown === e}
-          className="flex-1 rounded-md bg-bg py-2 text-2xl transition-all hover:bg-bg/60 hover:scale-110 active:scale-95 disabled:opacity-40"
+          disabled={onCooldown}
+          className="flex-1 rounded-md bg-bg py-2 text-2xl transition-all hover:bg-bg/60 hover:scale-110 active:scale-95 disabled:opacity-40 disabled:hover:scale-100"
         >
           {e}
         </button>

@@ -12,7 +12,17 @@ const PATHS: { id: Path; label: string; icon: string; sub: string }[] = [
   { id: "flappy", label: "Flappy", icon: "🐦", sub: "skill · cents" },
 ];
 
-export function LastChanceZone({ lobbyId }: { lobbyId: string }) {
+export function LastChanceZone({
+  lobbyId,
+  onBanked,
+  onHold,
+}: {
+  lobbyId: string;
+  /** Apply a freshly-credited balance locally (instant, no realtime wait). */
+  onBanked?: (newBalanceCents: number) => void;
+  /** Keep the zone mounted through a win reveal even once un-busted. */
+  onHold?: (held: boolean) => void;
+}) {
   const [active, setActive] = useState<Path>("wheel");
 
   return (
@@ -42,9 +52,13 @@ export function LastChanceZone({ lobbyId }: { lobbyId: string }) {
           );
         })}
       </div>
-      {active === "wheel" && <LastChanceWheel lobbyId={lobbyId} />}
-      {active === "mines" && <LastChanceMines lobbyId={lobbyId} />}
-      {active === "flappy" && <FlappyGame lobbyId={lobbyId} />}
+      {active === "wheel" && (
+        <LastChanceWheel lobbyId={lobbyId} onBanked={onBanked} onHold={onHold} />
+      )}
+      {active === "mines" && (
+        <LastChanceMines lobbyId={lobbyId} onBanked={onBanked} onHold={onHold} />
+      )}
+      {active === "flappy" && <FlappyGame lobbyId={lobbyId} onBanked={onBanked} />}
     </div>
   );
 }

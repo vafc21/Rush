@@ -41,6 +41,9 @@ export default function LobbyPage() {
   const [startsAt, setStartsAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [selfNickname, setSelfNickname] = useState<string | null>(null);
+  // Keeps the Last Chance zone mounted through a win reveal (wheel spin /
+  // mines flip), even after the win has already cleared our busted flag.
+  const [lastChanceHold, setLastChanceHold] = useState(false);
   // Once we've ever found ourselves in the lobby, track that. If we then
   // disappear (host kicked/banned us), redirect home.
   const everSeenSelfRef = useRef(false);
@@ -237,6 +240,27 @@ export default function LobbyPage() {
     endsAt ? Math.max(0, Math.floor((endsAt - nowMs) / 1000)) : undefined;
   const inCountdown = startsAt !== null && nowMs < startsAt;
 
+  // Apply a freshly-credited balance to our own seat immediately, so Last
+  // Chance winnings show up the instant the server confirms them rather than
+  // waiting on the realtime `balance_update` round-trip.
+  function applyLocalBalance(newBalanceCents: number) {
+    setSnapshot((s) => {
+      if (!s || !selfNickname) return s;
+      return {
+        ...s,
+        players: s.players.map((p) =>
+          p.nickname === selfNickname
+            ? {
+                ...p,
+                balance_cents: newBalanceCents,
+                is_busted: newBalanceCents >= 100 ? false : p.is_busted,
+              }
+            : p
+        ),
+      };
+    });
+  }
+
   async function handleLeave() {
     // Free the seat (only acts while waiting; harmless otherwise) so the
     // host role hands off to the next player, then head to the hub.
@@ -265,8 +289,12 @@ export default function LobbyPage() {
             <Countdown startsAt={startsAt!} nowMs={nowMs} />
           )}
           {snapshot.lobby.status === "active" && !inCountdown && self && (
-            self.is_busted ? (
-              <LastChanceZone lobbyId={id!} />
+            self.is_busted || lastChanceHold ? (
+              <LastChanceZone
+                lobbyId={id!}
+                onBanked={applyLocalBalance}
+                onHold={setLastChanceHold}
+              />
             ) : (
               <GameTabs lobbyId={id!} balanceCents={self.balance_cents} />
             )

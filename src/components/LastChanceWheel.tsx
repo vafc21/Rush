@@ -6,6 +6,7 @@ const SEGMENTS = 50;
 const SEGMENT_DEG = 360 / SEGMENTS;
 const COOLDOWN_MS = 20_000;
 const SPIN_MS = 3_500;
+const WIN_LINGER_MS = 2_400; // let the player admire the landing before leaving
 
 type SpinResult = {
   won: boolean;
@@ -15,7 +16,15 @@ type SpinResult = {
   rebuyCents: number;
 };
 
-export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
+export function LastChanceWheel({
+  lobbyId,
+  onBanked,
+  onHold,
+}: {
+  lobbyId: string;
+  onBanked?: (newBalanceCents: number) => void;
+  onHold?: (held: boolean) => void;
+}) {
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
@@ -23,6 +32,8 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
   const [last, setLast] = useState<SpinResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tickRef = useRef<number | null>(null);
+  const onHoldRef = useRef(onHold);
+  onHoldRef.current = onHold;
 
   // 1Hz tick for cooldown countdown
   useEffect(() => {
@@ -31,6 +42,9 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
       if (tickRef.current) clearInterval(tickRef.current);
     };
   }, []);
+
+  // Release any outstanding hold if we unmount mid-reveal.
+  useEffect(() => () => onHoldRef.current?.(false), []);
 
   const cooldownLeftMs =
     cooldownUntil !== null ? Math.max(0, cooldownUntil - nowMs) : 0;
@@ -53,8 +67,16 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
     }
     const result = (await res.json()) as SpinResult;
 
-    // Rotate by 8 full turns plus the angle to bring the landed segment
-    // under the pointer at the top. Segment 0 is at the top, going clockwise.
+    // A win clears the busted flag server-side (and broadcasts it), which
+    // would otherwise yank this whole component out from under the player
+    // mid-spin. Ask the parent to keep us mounted until the reveal is done.
+    if (result.won) {
+      onHold?.(true);
+    }
+
+    // Rotate by 8 full turns plus the offset that brings the landed segment
+    // under the top pointer. Segment 0 (gold) sits at the top, segments
+    // increase clockwise — so landing on 0 leaves the pointer on gold.
     const baseTurns = 8;
     const targetDeg =
       baseTurns * 360 + (360 - result.landedSegment * SEGMENT_DEG);
@@ -63,7 +85,12 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
     setTimeout(() => {
       setSpinning(false);
       setLast(result);
-      if (!result.won) {
+      if (result.won) {
+        onBanked?.(result.rebuyCents);
+        // Hold a beat on the winning result, then hand control back to the
+        // main games (the player is no longer busted).
+        setTimeout(() => onHold?.(false), WIN_LINGER_MS);
+      } else {
         setCooldownUntil(Date.now() + COOLDOWN_MS);
       }
     }, SPIN_MS);
@@ -73,12 +100,14 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
   const segments = Array.from({ length: SEGMENTS }, (_, i) => i);
 
   return (
-    <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6 text-center">
+    <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/5 bg-gradient-to-b from-panel to-bg p-6 text-center shadow-xl">
       <div>
-        <p className="text-xs uppercase tracking-widest text-muted">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-muted">
           Last Chance
         </p>
-        <h2 className="text-xl font-black text-brand">Wheel</h2>
+        <h2 className="text-2xl font-black tracking-tight text-brand drop-shadow-[0_0_10px_rgba(255,184,0,0.35)]">
+          🎡 Wheel
+        </h2>
         <p className="mt-1 text-xs text-secondary">
           Land on gold for a $500 rebuy. 1 / {SEGMENTS} per spin.
         </p>
@@ -90,13 +119,18 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
           <div
             className="h-0 w-0"
             style={{
-              borderLeft: "10px solid transparent",
-              borderRight: "10px solid transparent",
-              borderTop: "16px solid #FFB800",
-              filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.5))",
+              borderLeft: "11px solid transparent",
+              borderRight: "11px solid transparent",
+              borderTop: "18px solid #FFB800",
+              filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.6))",
             }}
           />
         </div>
+        {/* Outer glow ring */}
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{ boxShadow: "0 0 30px rgba(255,184,0,0.18), inset 0 0 0 4px rgba(255,184,0,0.12)" }}
+        />
         {/* Wheel */}
         <svg
           viewBox="-50 -50 100 100"
@@ -106,10 +140,14 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
             transition: spinning
               ? `transform ${SPIN_MS}ms cubic-bezier(0.15, 0.85, 0.25, 1)`
               : undefined,
+            filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.45))",
           }}
         >
           {segments.map((i) => {
-            const startAngle = i * SEGMENT_DEG - 90 - SEGMENT_DEG / 2;
+            // Center segment i at angle (i * SEGMENT_DEG) clockwise from the
+            // top. polarToCartesian already offsets 0° to the top, so segment
+            // 0 sits under the pointer.
+            const startAngle = i * SEGMENT_DEG - SEGMENT_DEG / 2;
             const endAngle = startAngle + SEGMENT_DEG;
             const start = polarToCartesian(0, 0, 48, startAngle);
             const end = polarToCartesian(0, 0, 48, endAngle);
@@ -136,8 +174,11 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
               />
             );
           })}
+          {/* Outer rim */}
+          <circle r={48} fill="none" stroke="#FFB800" strokeWidth={1} opacity={0.5} />
           {/* Center hub */}
-          <circle r={8} fill="#0F212E" stroke="#FFB800" strokeWidth={1} />
+          <circle r={9} fill="#0F212E" stroke="#FFB800" strokeWidth={1.5} />
+          <circle r={3} fill="#FFB800" />
         </svg>
       </div>
 
@@ -156,14 +197,14 @@ export function LastChanceWheel({ lobbyId }: { lobbyId: string }) {
       {error && <p className="text-sm text-red-400">{error}</p>}
       {last && !error && (
         <div
-          className={`rounded-md px-3 py-3 text-center text-sm font-bold ${
+          className={`rounded-lg px-3 py-3 text-center text-sm font-bold ring-1 ${
             last.won
-              ? "bg-accent/10 text-accent"
-              : "bg-red-500/10 text-red-300"
+              ? "bg-accent/10 text-accent ring-accent/20"
+              : "bg-red-500/10 text-red-300 ring-red-500/20"
           }`}
         >
           {last.won
-            ? `You won! +$${(last.rebuyCents / 100).toFixed(2)} — back in the game.`
+            ? `🎉 You won! +$${(last.rebuyCents / 100).toFixed(2)} — back in the game.`
             : "No luck. Try again in 20s."}
         </div>
       )}

@@ -1,10 +1,20 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TILES = 25;
 const COOLDOWN_MS = 5_000;
 
-export function LastChanceMines({ lobbyId }: { lobbyId: string }) {
+const WIN_LINGER_MS = 2_400; // let the player see the win before leaving the zone
+
+export function LastChanceMines({
+  lobbyId,
+  onBanked,
+  onHold,
+}: {
+  lobbyId: string;
+  onBanked?: (newBalanceCents: number) => void;
+  onHold?: (held: boolean) => void;
+}) {
   const [picked, setPicked] = useState<number | null>(null);
   const [result, setResult] = useState<{
     won: boolean;
@@ -15,6 +25,11 @@ export function LastChanceMines({ lobbyId }: { lobbyId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const onHoldRef = useRef(onHold);
+  onHoldRef.current = onHold;
+
+  // Release any outstanding hold if we unmount mid-reveal.
+  useEffect(() => () => onHoldRef.current?.(false), []);
 
   // Cooldown tick
   if (cooldownUntil) {
@@ -48,7 +63,14 @@ export function LastChanceMines({ lobbyId }: { lobbyId: string }) {
       rebuyCents: number;
     };
     setResult(data);
-    if (!data.won) {
+    if (data.won) {
+      // Winning clears the busted flag server-side (and broadcasts it),
+      // which would unmount this component before the player sees the
+      // result. Hold the zone open for the reveal, then hand back control.
+      onHold?.(true);
+      onBanked?.(data.rebuyCents);
+      setTimeout(() => onHold?.(false), WIN_LINGER_MS);
+    } else {
       setCooldownUntil(Date.now() + COOLDOWN_MS);
       // Reset to a new attempt after the cooldown elapses
       setTimeout(() => {

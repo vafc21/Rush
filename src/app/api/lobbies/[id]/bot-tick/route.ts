@@ -11,7 +11,17 @@ import { MAX_BET_CENTS } from "@/lib/games/limits";
 
 const BOT_REACTIONS = ["🔥", "😱", "💀", "🚀"] as const;
 
-type Archetype = "cautious" | "balanced" | "chaotic";
+/**
+ * Per-tick chance that a busted bot gets a "Last Chance" rebuy back into
+ * the round, and the comeback stake it returns with. Without this, bots
+ * that the house edge knocks below $1 are filtered out of every future
+ * tick and silently stop betting, freezing the leaderboard. This mirrors
+ * the human Last Chance zone (Wheel / Mines / Flappy).
+ */
+const BOT_REBUY_CHANCE = 0.5;
+const BOT_REBUY_CENTS = 5_000; // $50 comeback stake
+
+type Archetype = "cautious" | "balanced" | "chaotic" | "risky";
 
 type Personality = {
   actChance: number;
@@ -60,6 +70,18 @@ const PROFILES: Record<Archetype, Personality> = {
     diceRollUnderRange: [10, 50],
     minesCountRange: [5, 12],
   },
+  // High-roller degens: bet big, swing for moonshots, rarely sit a tick
+  // out. They blow up often — which is exactly why bot rebuys matter.
+  risky: {
+    actChance: 0.9,
+    reactChance: 0.3,
+    betFractionRange: [0.18, 0.4],
+    minesShare: 0.35,
+    crashShare: 0.45,
+    crashAutoCashoutRange: [4.0, 15.0],
+    diceRollUnderRange: [4, 20],
+    minesCountRange: [10, 20],
+  },
 };
 
 /** Derives a stable archetype from a bot's UUID — same bot, same personality. */
@@ -68,13 +90,13 @@ function archetypeFor(botId: string): Archetype {
   for (let i = 0; i < botId.length; i++) {
     h = (h * 31 + botId.charCodeAt(i)) >>> 0;
   }
-  // 20% cautious / 60% balanced / 20% chaotic
+  // 20% cautious / 40% balanced / 20% chaotic / 20% risky
   const slots: Archetype[] = [
     "cautious",
     "balanced",
     "balanced",
-    "balanced",
     "chaotic",
+    "risky",
   ];
   return slots[h % slots.length];
 }
@@ -106,17 +128,58 @@ export async function POST(
     return NextResponse.json({ skipped: "lobby not active" });
   }
 
-  const { data: bots } = await supabase
+  const { data: allBots } = await supabase
     .from("lobby_players")
-    .select("id, balance_cents")
+    .select("id, balance_cents, is_busted")
     .eq("lobby_id", lobbyId)
-    .eq("is_bot", true)
-    .eq("is_busted", false);
-  if (!bots || bots.length === 0) {
-    return NextResponse.json({ skipped: "no eligible bots" });
+    .eq("is_bot", true);
+  if (!allBots || allBots.length === 0) {
+    return NextResponse.json({ skipped: "no bots" });
   }
 
-  const bot = bots[Math.floor(Math.random() * bots.length)];
+  const bustedBots = allBots.filter((b) => b.is_busted);
+  const liveBots = allBots.filter((b) => !b.is_busted);
+
+  // Bot "Last Chance": occasionally rebuy a busted bot back into the round
+  // so the field keeps betting instead of freezing once the house edge has
+  // knocked bots out. A balance_update above the bust line clears is_busted
+  // on the client (it re-derives the flag from the balance), so no separate
+  // unbust event is needed.
+  if (bustedBots.length > 0 && Math.random() < BOT_REBUY_CHANCE) {
+    const reviving = bustedBots[Math.floor(Math.random() * bustedBots.length)];
+    const { data: newBal, error: creditErr } = await supabase.rpc(
+      "credit_balance",
+      { p_player_id: reviving.id, p_amount_cents: BOT_REBUY_CENTS }
+    );
+    if (!creditErr && newBal !== null && newBal !== undefined) {
+      await supabase
+        .from("lobby_players")
+        .update({ is_busted: false })
+        .eq("id", reviving.id);
+      await publishLobby(lobbyId, {
+        type: "balance_update",
+        lobbyPlayerId: reviving.id,
+        balanceCents: newBal as number,
+      });
+      await publishLobby(lobbyId, {
+        type: "reaction",
+        lobbyPlayerId: reviving.id,
+        emoji: "🚀",
+      });
+      return NextResponse.json({
+        rebought: true,
+        lobbyPlayerId: reviving.id,
+        balanceCents: newBal as number,
+      });
+    }
+    // Fall through and let a live bot act on credit failure.
+  }
+
+  if (liveBots.length === 0) {
+    return NextResponse.json({ skipped: "all bots busted" });
+  }
+
+  const bot = liveBots[Math.floor(Math.random() * liveBots.length)];
   const profile = PROFILES[archetypeFor(bot.id)];
 
   // Reaction roll — independent of betting; some ticks just emote.

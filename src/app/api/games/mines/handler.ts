@@ -8,6 +8,7 @@ import {
 } from "@/lib/games/mines";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 /**
  * Mines game-state is stored on a single `bets` row's `details` JSON for
@@ -140,6 +141,9 @@ export async function revealMinesTile(
   if (isMine) {
     const nextDetails: MinesDetails = { ...details, status: "exploded" };
     await supabase.from("bets").update({ details: nextDetails }).eq("id", bet.id);
+    // Losing the bet may leave the player unable to afford the next one.
+    // The stake was already deducted at start, so check the live balance.
+    await maybeBustPlayer(bet.lobby_id, input.lobbyPlayerId);
     return {
       exploded: true,
       revealed: details.revealed,

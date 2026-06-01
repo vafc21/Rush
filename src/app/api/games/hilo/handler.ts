@@ -8,6 +8,7 @@ import {
 } from "@/lib/games/hilo";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 type HiloDetails = {
   startCard: Card;
@@ -150,6 +151,8 @@ export async function guessHilo(input: GuessInput): Promise<GuessResult> {
       status: "lost",
     };
     await supabase.from("bets").update({ details: nextDetails }).eq("id", bet.id);
+    // The stake was deducted at start; a loss may bust the player.
+    await maybeBustPlayer(bet.lobby_id, input.lobbyPlayerId);
     return {
       correct: false,
       drawn,

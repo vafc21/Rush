@@ -4,6 +4,7 @@ import { getServiceSupabase } from "@/lib/db/supabase";
 import { deal } from "@/lib/games/diamonds";
 import { MIN_BET_CENTS, MAX_BET_CENTS } from "@/lib/games/limits";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { maybeBustPlayer } from "@/lib/games/bust";
 
 export async function POST(req: NextRequest) {
   let session;
@@ -61,10 +62,7 @@ export async function POST(req: NextRequest) {
     lobbyPlayerId: seat.id,
     balanceCents: finalBalance,
   });
-  if (finalBalance < 100) {
-    await supabase.from("lobby_players").update({ is_busted: true }).eq("id", seat.id);
-    await publishLobby(seat.lobby_id, { type: "player_busted", lobbyPlayerId: seat.id });
-  }
+  await maybeBustPlayer(seat.lobby_id, seat.id, finalBalance);
   return NextResponse.json({
     hand: result.hand,
     multiplier: result.multiplier,

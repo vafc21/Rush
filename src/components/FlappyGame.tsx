@@ -7,6 +7,10 @@ import { Button } from "./Button";
  * pipes, each pipe passed banks $0.01 × current multiplier, multiplier
  * doubles every 10 pipes (1× / 2× / 4× / 8× / ...). Dying ends the run
  * and POSTs the pipe count to the server, which credits the player.
+ *
+ * The server returns the player's new lobby balance, which we hand back
+ * to the parent via `onBanked` so the balance updates instantly — without
+ * waiting for the realtime `balance_update` echo to make the round trip.
  */
 
 const W = 360;
@@ -19,6 +23,7 @@ const PIPE_SPACING = 200;
 const PIPE_SPEED = 2.5;
 const BIRD_X = 80;
 const BIRD_R = 12;
+const GROUND_H = 26; // decorative ground band; death floor stays at y = H
 
 const PIPES_PER_DOUBLING = 10;
 const BASE_CENTS_PER_PIPE = 1;
@@ -44,7 +49,43 @@ function multiplierAt(pipes: number): number {
   return Math.pow(2, Math.floor(pipes / PIPES_PER_DOUBLING));
 }
 
-export function FlappyGame({ lobbyId }: { lobbyId: string }) {
+// Pre-computed star field so it doesn't shimmer between frames.
+const STARS = Array.from({ length: 28 }, (_, i) => ({
+  x: (i * 53) % W,
+  y: (i * 89) % (H - GROUND_H - 40),
+  r: (i % 3) * 0.4 + 0.4,
+  a: ((i * 7) % 5) / 10 + 0.25,
+}));
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+export function FlappyGame({
+  lobbyId,
+  onBanked,
+}: {
+  lobbyId: string;
+  onBanked?: (newBalanceCents: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<Phase>("ready");
   const [pipeCount, setPipeCount] = useState(0);
@@ -58,7 +99,8 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
     nextPipeIn: 0,
     pipeCount: 0,
     phase: "ready" as Phase,
-    raf: 0,
+    frame: 0,
+    scroll: 0,
   });
 
   const flap = useCallback(() => {
@@ -88,23 +130,34 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
           body: JSON.stringify({ pipes }),
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { banked?: number };
+        const data = (await res.json()) as {
+          banked?: number;
+          newBalanceCents?: number;
+        };
         if (typeof data.banked === "number" && data.banked > bestBanked) {
           setBestBanked(data.banked);
+        }
+        // Reflect the credited balance immediately so the player sees the
+        // money land without waiting on the realtime round-trip.
+        if (typeof data.newBalanceCents === "number") {
+          onBanked?.(data.newBalanceCents);
         }
       } catch {
         // ignore — UI keeps the last shown banked
       }
     },
-    [lobbyId, bestBanked]
+    [lobbyId, bestBanked, onBanked]
   );
 
-  const die = useCallback(() => {
+  // Keep the latest `die` reachable from the rAF loop without making the
+  // loop effect re-subscribe (and tear down the animation) every render.
+  const dieRef = useRef<() => void>(() => {});
+  dieRef.current = useCallback(() => {
     const s = stateRef.current;
+    if (s.phase !== "playing") return;
     s.phase = "dead";
     setPhase("dead");
-    const pipes = s.pipeCount;
-    submitRun(pipes);
+    submitRun(s.pipeCount);
   }, [submitRun]);
 
   // Game loop
@@ -114,11 +167,14 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let rafId = 0;
     const tick = () => {
       const s = stateRef.current;
+      s.frame++;
 
       // Update
       if (s.phase === "playing") {
+        s.scroll = (s.scroll + PIPE_SPEED) % 24;
         s.birdV += GRAVITY;
         s.birdY += s.birdV;
 
@@ -144,72 +200,33 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
 
         // Collisions
         if (s.birdY > H - BIRD_R || s.birdY < BIRD_R) {
-          die();
+          dieRef.current();
         } else {
           for (const p of s.pipes) {
             const inX = BIRD_X + BIRD_R > p.x && BIRD_X - BIRD_R < p.x + PIPE_W;
             if (inX) {
               if (s.birdY - BIRD_R < p.topH || s.birdY + BIRD_R > p.topH + PIPE_GAP) {
-                die();
+                dieRef.current();
                 break;
               }
             }
           }
         }
-      }
-
-      // Draw
-      ctx.fillStyle = "#0F212E";
-      ctx.fillRect(0, 0, W, H);
-
-      // Pipes
-      ctx.fillStyle = "#00E701";
-      for (const p of s.pipes) {
-        ctx.fillRect(p.x, 0, PIPE_W, p.topH);
-        ctx.fillRect(p.x, p.topH + PIPE_GAP, PIPE_W, H - p.topH - PIPE_GAP);
-      }
-
-      // Ground line
-      ctx.fillStyle = "#1A2C38";
-      ctx.fillRect(0, H - 2, W, 2);
-
-      // Bird
-      ctx.beginPath();
-      ctx.arc(BIRD_X, s.birdY, BIRD_R, 0, Math.PI * 2);
-      ctx.fillStyle = "#FFB800";
-      ctx.fill();
-      // Bird eye
-      ctx.beginPath();
-      ctx.arc(BIRD_X + 4, s.birdY - 3, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#0F212E";
-      ctx.fill();
-
-      // Overlay text
-      if (s.phase === "ready") {
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        ctx.font = "bold 20px ui-sans-serif, system-ui";
-        ctx.textAlign = "center";
-        ctx.fillText("Tap to flap", W / 2, H / 2);
       } else if (s.phase === "dead") {
-        ctx.fillStyle = "rgba(255,255,255,0.9)";
-        ctx.font = "bold 24px ui-sans-serif, system-ui";
-        ctx.textAlign = "center";
-        ctx.fillText("Splat", W / 2, H / 2 - 10);
-        ctx.font = "14px ui-sans-serif, system-ui";
-        ctx.fillStyle = "rgba(177,186,211,0.85)";
-        ctx.fillText(
-          `${s.pipeCount} pipes · $${(bankedFor(s.pipeCount) / 100).toFixed(2)} banked`,
-          W / 2,
-          H / 2 + 16
-        );
+        // Let the bird drop onto the ground for a softer landing.
+        if (s.birdY < H - BIRD_R) {
+          s.birdV += GRAVITY;
+          s.birdY = Math.min(H - BIRD_R, s.birdY + s.birdV);
+        }
       }
 
-      s.raf = requestAnimationFrame(tick);
+      draw(ctx, s);
+      rafId = requestAnimationFrame(tick);
     };
-    stateRef.current.raf = requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick);
 
-    return () => cancelAnimationFrame(stateRef.current.raf);
-  }, [die]);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   // Input bindings
   useEffect(() => {
@@ -226,35 +243,36 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
   function tryAgain() {
     const s = stateRef.current;
     s.phase = "ready";
+    s.birdY = H / 2;
+    s.birdV = 0;
+    s.pipes = [];
     setPhase("ready");
     setPipeCount(0);
     setBanked(0);
   }
 
   return (
-    <div className="w-full max-w-md space-y-3 rounded-lg bg-panel p-6">
+    <div className="w-full max-w-md space-y-3 rounded-2xl border border-white/5 bg-gradient-to-b from-panel to-bg p-5 shadow-xl">
       <div className="text-center">
-        <p className="text-xs uppercase tracking-widest text-muted">Last Chance</p>
-        <h2 className="text-xl font-black text-brand">Flappy</h2>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-muted">
+          Last Chance
+        </p>
+        <h2 className="text-2xl font-black tracking-tight text-brand drop-shadow-[0_0_10px_rgba(255,184,0,0.35)]">
+          🐦 Flappy
+        </h2>
         <p className="mt-1 text-xs text-secondary">
           Tap / space to flap. $0.01 per pipe — multiplier doubles every 10.
         </p>
       </div>
 
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted">
-          Pipes <span className="font-bold tabular-nums text-white">{pipeCount}</span>
-        </span>
-        <span className="text-muted">
-          Multi <span className="font-bold tabular-nums text-accent">{multiplierAt(pipeCount)}×</span>
-        </span>
-        <span className="text-muted">
-          Banked <span className="font-bold tabular-nums text-accent">${(banked / 100).toFixed(2)}</span>
-        </span>
+      <div className="grid grid-cols-3 gap-2">
+        <Stat label="Pipes" value={String(pipeCount)} tone="white" />
+        <Stat label="Multi" value={`${multiplierAt(pipeCount)}×`} tone="brand" />
+        <Stat label="Banked" value={`$${(banked / 100).toFixed(2)}`} tone="accent" />
       </div>
 
       <div
-        className="overflow-hidden rounded-md"
+        className="relative overflow-hidden rounded-xl ring-1 ring-white/10"
         style={{ maxWidth: W }}
         onPointerDown={(e) => {
           e.preventDefault();
@@ -265,16 +283,25 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
           ref={canvasRef}
           width={W}
           height={H}
-          className="block w-full touch-none"
+          className="block w-full cursor-pointer touch-none select-none"
           style={{ aspectRatio: `${W}/${H}` }}
         />
       </div>
 
       {phase === "dead" && (
         <div className="space-y-2">
-          {banked > 0 && (
-            <p className="rounded-md bg-accent/10 px-3 py-2 text-center text-sm font-bold text-accent">
-              +${(banked / 100).toFixed(2)} added to your balance
+          {banked > 0 ? (
+            <p className="rounded-lg bg-accent/10 px-3 py-2 text-center text-sm font-bold text-accent ring-1 ring-accent/20">
+              +${(banked / 100).toFixed(2)} cashed into your balance
+            </p>
+          ) : (
+            <p className="rounded-lg bg-white/5 px-3 py-2 text-center text-sm text-muted">
+              No pipes cleared — give it another go.
+            </p>
+          )}
+          {bestBanked > 0 && (
+            <p className="text-center text-xs text-muted">
+              Best run this session: ${(bestBanked / 100).toFixed(2)}
             </p>
           )}
           <Button onClick={tryAgain} className="w-full">
@@ -284,4 +311,228 @@ export function FlappyGame({ lobbyId }: { lobbyId: string }) {
       )}
     </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "white" | "brand" | "accent";
+}) {
+  const color =
+    tone === "brand" ? "text-brand" : tone === "accent" ? "text-accent" : "text-white";
+  return (
+    <div className="rounded-lg bg-black/20 px-2 py-1.5 text-center ring-1 ring-white/5">
+      <div className="text-[9px] font-semibold uppercase tracking-widest text-muted">
+        {label}
+      </div>
+      <div className={`text-base font-black tabular-nums ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+type GameState = {
+  birdY: number;
+  birdV: number;
+  pipes: Pipe[];
+  pipeCount: number;
+  phase: Phase;
+  frame: number;
+  scroll: number;
+};
+
+function draw(ctx: CanvasRenderingContext2D, s: GameState) {
+  // --- Sky ---
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, "#0A1622");
+  sky.addColorStop(0.6, "#11293A");
+  sky.addColorStop(1, "#16374D");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // --- Stars ---
+  for (const st of STARS) {
+    ctx.globalAlpha = st.a;
+    ctx.fillStyle = "#CFE3FF";
+    ctx.beginPath();
+    ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // --- Distant skyline glow on the horizon ---
+  const horizon = H - GROUND_H;
+  ctx.fillStyle = "rgba(0,231,1,0.06)";
+  for (let i = 0; i < 7; i++) {
+    const bw = 26 + ((i * 37) % 22);
+    const bh = 24 + ((i * 53) % 46);
+    const bx = ((i * 70 - (s.scroll * 0.3)) % (W + 60)) - 30;
+    ctx.fillRect(bx, horizon - bh, bw, bh);
+  }
+
+  // --- Pipes (neon, with glow + cap) ---
+  ctx.save();
+  ctx.shadowColor = "rgba(0,231,1,0.55)";
+  ctx.shadowBlur = 14;
+  for (const p of s.pipes) {
+    drawPipe(ctx, p.x, 0, p.topH, false);
+    drawPipe(ctx, p.x, p.topH + PIPE_GAP, H - p.topH - PIPE_GAP, true);
+  }
+  ctx.restore();
+
+  // --- Ground band ---
+  const groundGrad = ctx.createLinearGradient(0, horizon, 0, H);
+  groundGrad.addColorStop(0, "#0C1C28");
+  groundGrad.addColorStop(1, "#081019");
+  ctx.fillStyle = groundGrad;
+  ctx.fillRect(0, horizon, W, GROUND_H);
+  // glowing top edge
+  ctx.fillStyle = "rgba(0,231,1,0.8)";
+  ctx.fillRect(0, horizon, W, 2);
+  // scrolling ticks
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  for (let x = -24 + (s.scroll % 24); x < W; x += 24) {
+    ctx.fillRect(x, horizon + 6, 12, 3);
+  }
+
+  // --- Bird ---
+  drawBird(ctx, s);
+
+  // --- Overlays ---
+  if (s.phase === "ready") {
+    panel(ctx, "Tap to flap", "Dodge the pipes — bank cents per gap");
+  } else if (s.phase === "playing") {
+    // big live score
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.font = "900 44px ui-sans-serif, system-ui";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 8;
+    ctx.fillText(String(s.pipeCount), W / 2, 64);
+    ctx.shadowBlur = 0;
+  } else if (s.phase === "dead") {
+    panel(
+      ctx,
+      "Splat!",
+      `${s.pipeCount} pipes · $${(bankedFor(s.pipeCount) / 100).toFixed(2)} banked`
+    );
+  }
+}
+
+function drawPipe(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  h: number,
+  capAtTop: boolean
+) {
+  if (h <= 0) return;
+  const grad = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+  grad.addColorStop(0, "#0a8f24");
+  grad.addColorStop(0.18, "#2fdd4e");
+  grad.addColorStop(0.5, "#00E701");
+  grad.addColorStop(0.85, "#11a52b");
+  grad.addColorStop(1, "#0a7d20");
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, PIPE_W, h);
+
+  // glossy highlight stripe
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.fillRect(x + 8, y, 6, h);
+
+  // cap (lip) at the mouth of the pipe
+  const capH = 16;
+  const capY = capAtTop ? y : y + h - capH;
+  ctx.fillStyle = "#0e6f1f";
+  ctx.fillRect(x - 4, capY, PIPE_W + 8, capH);
+  ctx.fillStyle = grad;
+  ctx.fillRect(x - 4, capY + 3, PIPE_W + 8, capH - 6);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(x, capY + 3, 6, capH - 6);
+}
+
+function drawBird(ctx: CanvasRenderingContext2D, s: GameState) {
+  const x = BIRD_X;
+  const y = s.birdY;
+  // tilt: nose up when rising, dive down when falling
+  const tilt = Math.max(-0.5, Math.min(1.1, s.birdV / 12));
+  // wing flap cycle
+  const wing = Math.sin(s.frame * 0.4) * 0.5;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+
+  ctx.shadowColor = "rgba(255,184,0,0.5)";
+  ctx.shadowBlur = 12;
+
+  // body
+  const body = ctx.createRadialGradient(-3, -3, 2, 0, 0, BIRD_R + 2);
+  body.addColorStop(0, "#FFE08A");
+  body.addColorStop(0.55, "#FFB800");
+  body.addColorStop(1, "#E59400");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // wing
+  ctx.fillStyle = "#F59E0B";
+  ctx.beginPath();
+  ctx.ellipse(-3, 2 + wing * 4, 7, 4.5, wing * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.12)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // beak
+  ctx.fillStyle = "#FF7A00";
+  ctx.beginPath();
+  ctx.moveTo(BIRD_R - 2, -2);
+  ctx.lineTo(BIRD_R + 7, 1);
+  ctx.lineTo(BIRD_R - 2, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // eye white + pupil
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(5, -4, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#0F212E";
+  ctx.beginPath();
+  ctx.arc(6.5, -4, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function panel(ctx: CanvasRenderingContext2D, title: string, sub: string) {
+  const pw = 240;
+  const ph = 92;
+  const px = (W - pw) / 2;
+  const py = H / 2 - ph / 2 - 20;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(10,22,34,0.82)";
+  roundRect(ctx, px, py, pw, ph, 14);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,184,0,0.35)";
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, px, py, pw, ph, 14);
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#FFD45E";
+  ctx.font = "900 26px ui-sans-serif, system-ui";
+  ctx.fillText(title, W / 2, py + 40);
+
+  ctx.fillStyle = "rgba(177,186,211,0.92)";
+  ctx.font = "500 13px ui-sans-serif, system-ui";
+  ctx.fillText(sub, W / 2, py + 66);
+  ctx.restore();
 }

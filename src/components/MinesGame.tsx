@@ -401,8 +401,10 @@ export function MinesGame({
         })}
       </div>
 
-      {/* Pre-game controls */}
-      {!game && (
+      {/* Mines + bet controls. Kept mounted during auto rounds (game set)
+          so the layout — and the Stop button below — doesn't jump every
+          round. In manual mode they only show before a game starts. */}
+      {(!game || mode === "auto") && (
         <>
           <div>
             <div className="mb-1 flex items-baseline justify-between">
@@ -417,7 +419,7 @@ export function MinesGame({
               max={MAX_MINES}
               value={minesCount}
               onChange={(e) => setMinesCount(parseInt(e.target.value))}
-              disabled={busy}
+              disabled={busy || !!game}
               className="w-full accent-accent"
             />
           </div>
@@ -490,18 +492,23 @@ export function MinesGame({
             </div>
           </div>
 
-          {mode === "manual" ? (
-            <Button onClick={start} disabled={busy} className="w-full">
-              {busy ? "Starting…" : "Start Game"}
-            </Button>
-          ) : (
-            <p className="text-center text-[11px] text-muted">
-              {preselected.size === 0
-                ? "Click tiles to pre-select what Auto will reveal each round"
-                : `${preselected.size} tile${preselected.size > 1 ? "s" : ""} selected — Auto will cash out if they're all safe`}
-            </p>
-          )}
         </>
+      )}
+
+      {/* Manual start — only before a round, manual mode */}
+      {!game && mode === "manual" && (
+        <Button onClick={start} disabled={busy} className="w-full">
+          {busy ? "Starting…" : "Start Game"}
+        </Button>
+      )}
+
+      {/* Auto pre-select hint */}
+      {mode === "auto" && (
+        <p className="text-center text-[11px] text-muted">
+          {preselected.size === 0
+            ? "Click tiles to pre-select what Auto will reveal each round"
+            : `${preselected.size} tile${preselected.size > 1 ? "s" : ""} selected — Auto will cash out if they're all safe`}
+        </p>
       )}
 
       {/* Auto-bet driver. Rendered OUTSIDE the {!game && ...} block so it

@@ -141,8 +141,9 @@ export function KenoGame({
         })}
       </div>
 
-      {/* Paytable preview */}
-      {paytable && !last && (
+      {/* Paytable preview — kept visible during a draw too so the layout
+          (and the Stop button during auto-bet) doesn't jump each round. */}
+      {paytable && (
         <div className="rounded-md bg-bg p-2">
           <p className="mb-1 text-[10px] uppercase tracking-wider text-muted">
             Paytable (matches → multi)

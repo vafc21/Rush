@@ -99,46 +99,54 @@ export function BaccaratGame({
     <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6">
       <h2 className="text-lg font-bold">♠ Baccarat</h2>
 
-      {hand && (
-        <div className="relative space-y-2">
-          <WinBurst
-            trigger={revealed && hand.won ? `${hand.winner}-${hand.playerTotal}-${hand.bankerTotal}` : false}
-            intensity={hand.side === "tie" && hand.won ? 1.8 : 1}
-          />
-          <div>
-            <p className="mb-1 text-xs uppercase tracking-wider text-muted">
-              Player <span className="ml-1 tabular-nums text-white">{hand.playerTotal}</span>
-            </p>
-            <div className="flex gap-1.5">
-              {hand.player.map((c, i) => (
-                <CardView key={i} card={c} index={i} />
-              ))}
+      {/* Fixed-height table area so the layout (and the Stop button during
+          auto-bet) doesn't jump as hands are dealt and cleared. */}
+      <div className="relative min-h-[228px] space-y-2">
+        {hand ? (
+          <>
+            <WinBurst
+              trigger={revealed && hand.won ? `${hand.winner}-${hand.playerTotal}-${hand.bankerTotal}` : false}
+              intensity={hand.side === "tie" && hand.won ? 1.8 : 1}
+            />
+            <div>
+              <p className="mb-1 text-xs uppercase tracking-wider text-muted">
+                Player <span className="ml-1 tabular-nums text-white">{hand.playerTotal}</span>
+              </p>
+              <div className="flex gap-1.5">
+                {hand.player.map((c, i) => (
+                  <CardView key={i} card={c} index={i} />
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <p className="mb-1 text-xs uppercase tracking-wider text-muted">
-              Banker <span className="ml-1 tabular-nums text-white">{hand.bankerTotal}</span>
-            </p>
-            <div className="flex gap-1.5">
-              {hand.banker.map((c, i) => (
-                <CardView key={i} card={c} index={hand.player.length + i} />
-              ))}
+            <div>
+              <p className="mb-1 text-xs uppercase tracking-wider text-muted">
+                Banker <span className="ml-1 tabular-nums text-white">{hand.bankerTotal}</span>
+              </p>
+              <div className="flex gap-1.5">
+                {hand.banker.map((c, i) => (
+                  <CardView key={i} card={c} index={hand.player.length + i} />
+                ))}
+              </div>
             </div>
-          </div>
-          {revealed && (
-            <div
-              className={`rounded-md px-3 py-2 text-center text-sm font-bold ${
-                hand.won ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-300"
-              }`}
-            >
-              {hand.winner} won ·{" "}
-              {hand.won
-                ? `+${pts(hand.payoutCents - hand.betCents)} pts`
-                : `-${pts(hand.betCents)} pts`}
-            </div>
-          )}
-        </div>
-      )}
+            {revealed && (
+              <div
+                className={`rounded-md px-3 py-2 text-center text-sm font-bold ${
+                  hand.won ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {hand.winner} won ·{" "}
+                {hand.won
+                  ? `+${pts(hand.payoutCents - hand.betCents)} pts`
+                  : `-${pts(hand.betCents)} pts`}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="pt-20 text-center text-sm text-muted">
+            Pick a side and deal
+          </p>
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-2">
         {(["player", "banker", "tie"] as const).map((s) => {

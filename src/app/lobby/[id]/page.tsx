@@ -280,8 +280,10 @@ export default function LobbyPage() {
         showLeave
         onLeave={handleLeave}
       />
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 p-3 sm:gap-6 sm:p-6 md:flex-row">
-        <div className="flex-1">
+      <main className="mx-auto flex max-w-4xl flex-col items-center gap-4 p-3 sm:gap-6 sm:p-6 md:flex-row md:items-start md:justify-center">
+        {/* Game column — capped + min-w-0 so the wide tab strip scrolls
+            inside it instead of forcing the page to scroll sideways. */}
+        <div className="w-full min-w-0 max-w-md">
           {snapshot.lobby.status === "waiting" && (
             <Waiting snapshot={snapshot} selfNickname={selfNickname} />
           )}
@@ -303,7 +305,7 @@ export default function LobbyPage() {
             <EndOfRound lobbyId={id!} selfNickname={selfNickname} />
           )}
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="flex w-full max-w-md flex-col gap-3 md:w-72 md:shrink-0">
           <LeaderboardPanel seats={seats} selfId={self?.id ?? null} />
           {snapshot.lobby.status === "active" && !inCountdown && (
             <ReactionsBar lobbyId={id!} />

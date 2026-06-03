@@ -8,18 +8,14 @@ import {
 } from "@/app/api/games/mines/handler";
 import { publishLobby } from "@/lib/realtime/pusher-server";
 import { MAX_BET_CENTS } from "@/lib/games/limits";
+import {
+  MINES_COOLDOWN_MS,
+  LAST_CHANCE_REBUY_CENTS,
+  LAST_CHANCE_MINES_ODDS,
+  lastChanceCooldownRemaining,
+} from "@/lib/games/lastChance";
 
 const BOT_REACTIONS = ["🔥", "😱", "💀", "🚀"] as const;
-
-/**
- * Per-tick chance that a busted bot gets a "Last Chance" rebuy back into
- * the round, and the comeback stake it returns with. Without this, bots
- * that the house edge knocks below $1 are filtered out of every future
- * tick and silently stop betting, freezing the leaderboard. This mirrors
- * the human Last Chance zone (Wheel / Mines / Flappy).
- */
-const BOT_REBUY_CHANCE = 0.5;
-const BOT_REBUY_CENTS = 5_000; // $50 comeback stake
 
 type Archetype = "cautious" | "balanced" | "chaotic" | "risky";
 
@@ -140,43 +136,60 @@ export async function POST(
   const bustedBots = allBots.filter((b) => b.is_busted);
   const liveBots = allBots.filter((b) => !b.is_busted);
 
-  // Bot "Last Chance": occasionally rebuy a busted bot back into the round
-  // so the field keeps betting instead of freezing once the house edge has
-  // knocked bots out. A balance_update above the bust line clears is_busted
-  // on the client (it re-derives the flag from the balance), so no separate
-  // unbust event is needed.
-  if (bustedBots.length > 0 && Math.random() < BOT_REBUY_CHANCE) {
-    const reviving = bustedBots[Math.floor(Math.random() * bustedBots.length)];
+  // Bot "Last Chance": each busted bot attempts a comeback on the SAME terms
+  // a human gets — the Mines path's 1-in-25 odds for a 500-pt rebuy, gated by
+  // the same cooldown — rather than a flat handout. Without a comeback path
+  // the house edge would knock bots out for good and freeze the leaderboard.
+  // A balance_update above the bust line clears is_busted on the client, so
+  // no separate unbust event is needed.
+  let revived = 0;
+  for (const b of bustedBots) {
+    const remainingMs = await lastChanceCooldownRemaining(
+      supabase,
+      lobbyId,
+      b.id,
+      "last_chance_mines",
+      MINES_COOLDOWN_MS
+    );
+    if (remainingMs > 0) continue; // still on cooldown, like a human would be
+
+    const won = Math.floor(Math.random() * LAST_CHANCE_MINES_ODDS) === 0;
+    // Record the attempt so the cooldown has an anchor (and a win shows on
+    // the trajectory), exactly as the human Last Chance routes do.
+    await supabase.from("bets").insert({
+      lobby_id: lobbyId,
+      lobby_player_id: b.id,
+      game: "last_chance_mines",
+      bet_amount_cents: 0,
+      payout_cents: won ? LAST_CHANCE_REBUY_CENTS : 0,
+      details: { bot: true, won },
+    });
+    if (!won) continue;
+
     const { data: newBal, error: creditErr } = await supabase.rpc(
       "credit_balance",
-      { p_player_id: reviving.id, p_amount_cents: BOT_REBUY_CENTS }
+      { p_player_id: b.id, p_amount_cents: LAST_CHANCE_REBUY_CENTS }
     );
-    if (!creditErr && newBal !== null && newBal !== undefined) {
-      await supabase
-        .from("lobby_players")
-        .update({ is_busted: false })
-        .eq("id", reviving.id);
-      await publishLobby(lobbyId, {
-        type: "balance_update",
-        lobbyPlayerId: reviving.id,
-        balanceCents: newBal as number,
-      });
-      await publishLobby(lobbyId, {
-        type: "reaction",
-        lobbyPlayerId: reviving.id,
-        emoji: "🚀",
-      });
-      return NextResponse.json({
-        rebought: true,
-        lobbyPlayerId: reviving.id,
-        balanceCents: newBal as number,
-      });
-    }
-    // Fall through and let a live bot act on credit failure.
+    if (creditErr || newBal === null || newBal === undefined) continue;
+    await supabase
+      .from("lobby_players")
+      .update({ is_busted: false })
+      .eq("id", b.id);
+    await publishLobby(lobbyId, {
+      type: "balance_update",
+      lobbyPlayerId: b.id,
+      balanceCents: newBal as number,
+    });
+    await publishLobby(lobbyId, {
+      type: "reaction",
+      lobbyPlayerId: b.id,
+      emoji: "🚀",
+    });
+    revived++;
   }
 
   if (liveBots.length === 0) {
-    return NextResponse.json({ skipped: "all bots busted" });
+    return NextResponse.json({ skipped: "all bots busted", revived });
   }
 
   const bot = liveBots[Math.floor(Math.random() * liveBots.length)];

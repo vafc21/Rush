@@ -20,6 +20,15 @@ export const WHEEL_COOLDOWN_MS = 20_000;
 export const MINES_COOLDOWN_MS = 4_000;
 
 /**
+ * The rebuy a Last Chance win restores you to (500 pts), and the per-attempt
+ * win odds of the Mines comeback (1 in 25). Shared so CPU comebacks can run
+ * on exactly the same terms as a human's — same odds, same reward, same
+ * cooldown — instead of a flat handout.
+ */
+export const LAST_CHANCE_REBUY_CENTS = 50_000;
+export const LAST_CHANCE_MINES_ODDS = 25;
+
+/**
  * Milliseconds remaining before this player may attempt the given Last
  * Chance game again in this lobby (0 if allowed now). Based on the timestamp
  * of their most recent attempt at that game, which is recorded as a bet.

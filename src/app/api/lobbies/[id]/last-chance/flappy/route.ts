@@ -2,30 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { LAST_CHANCE_REBUY_CENTS } from "@/lib/games/lastChance";
 
 /**
  * POST /api/lobbies/[id]/last-chance/flappy
  * Body: { pipes }
  *
- * Player-reported number of pipes survived in a Flappy run. Server
- * computes the banked cents using the spec'd doubling-multiplier rule
- * (multiplier doubles every 10 pipes: 1× / 2× / 4× / 8× / ...).
+ * Banks a Flappy run. The score is reported by the client, so to stop a
+ * crafted request from claiming a free jackpot we:
+ *   1. Require a server-anchored run (POST .../flappy/start first) and
+ *      validate the reported pipes against the elapsed time — you can't have
+ *      passed more pipes than the run had time for.
+ *   2. Cap the total banked at the standard Last Chance rebuy (500 pts), so
+ *      even a long legit run is a comeback, not a windfall. (The doubling
+ *      curve would otherwise pay ~100k pts at MAX_PIPES.)
+ *   3. Consume the run marker so one run can't be banked twice.
  *
- * The client is the source of truth on the score — this is a teen game
- * with no real money, so we accept the run-length as reported. If we
- * cared about cheating later, we'd timestamp the run start in a separate
- * `start` endpoint and validate min/max possible pipes from elapsed time.
- *
- * Caps:
- *   - Anything above MAX_PIPES is clamped (defense against integer
- *     overflow if someone POSTs absurd numbers).
- *   - You must be busted to flap. Successful banking that brings you
- *     above the minimum bet ($1) clears the busted flag.
+ * You must be busted to flap; banking back above the minimum bet clears the
+ * busted flag.
  */
 
 const BASE_CENTS_PER_PIPE = 1;
 const PIPES_PER_DOUBLING = 10;
 const MAX_PIPES = 200;
+// A pipe passes roughly every ~1.3s of real play; gate well under that
+// (slower/throttled tabs only ever take longer per pipe) so legit runs are
+// never rejected while instant huge claims are.
+const MIN_MS_PER_PIPE = 800;
+// Banking ceiling — a comeback, not a jackpot. Mirrors the Wheel/Mines rebuy.
+const FLAPPY_CAP_CENTS = LAST_CHANCE_REBUY_CENTS;
 
 function bankedFor(pipes: number): number {
   if (pipes <= 0) return 0;
@@ -34,7 +39,7 @@ function bankedFor(pipes: number): number {
     const tier = Math.floor(i / PIPES_PER_DOUBLING);
     cents += BASE_CENTS_PER_PIPE * Math.pow(2, tier);
   }
-  return cents;
+  return Math.min(cents, FLAPPY_CAP_CENTS);
 }
 
 export async function POST(
@@ -78,16 +83,36 @@ export async function POST(
     return NextResponse.json({ error: "round over" }, { status: 409 });
   }
 
-  const banked = bankedFor(body.pipes);
+  // Find the player's most recent Flappy bet. It must be an un-banked run
+  // marker (phase: "start") — that anchors both that a run actually began
+  // and when, so the reported score can be validated against elapsed time.
+  const { data: recent } = await supabase
+    .from("bets")
+    .select("id, placed_at, details")
+    .eq("lobby_id", lobbyId)
+    .eq("lobby_player_id", seat.id)
+    .eq("game", "flappy")
+    .order("placed_at", { ascending: false })
+    .limit(1);
+  const marker = recent?.[0];
+  const markerPhase = (marker?.details as { phase?: string } | null)?.phase;
+  if (!marker || markerPhase !== "start") {
+    return NextResponse.json({ error: "no active run" }, { status: 409 });
+  }
 
-  await supabase.from("bets").insert({
-    lobby_id: lobbyId,
-    lobby_player_id: seat.id,
-    game: "flappy",
-    bet_amount_cents: 0,
-    payout_cents: banked,
-    details: { pipes: Math.min(body.pipes, MAX_PIPES) },
-  });
+  const elapsedMs = Date.now() - new Date(marker.placed_at).getTime();
+  const maxPipesByTime = Math.floor(elapsedMs / MIN_MS_PER_PIPE);
+  const pipes = Math.max(
+    0,
+    Math.min(body.pipes, maxPipesByTime, MAX_PIPES)
+  );
+  const banked = bankedFor(pipes);
+
+  // Consume the run marker so this run can't be banked again.
+  await supabase
+    .from("bets")
+    .update({ payout_cents: banked, details: { phase: "banked", pipes } })
+    .eq("id", marker.id);
 
   if (banked > 0) {
     const { data: newBal } = await supabase.rpc("credit_balance", {

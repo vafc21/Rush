@@ -117,10 +117,16 @@ export function FlappyGame({
       setPhase("playing");
       setPipeCount(0);
       setBanked(0);
+      // Anchor the run server-side so the banked score can be validated
+      // against elapsed time (anti-cheat). Fire-and-forget — the run plays
+      // locally regardless.
+      fetch(`/api/lobbies/${lobbyId}/last-chance/flappy/start`, {
+        method: "POST",
+      }).catch(() => {});
     } else if (s.phase === "playing") {
       s.birdV = FLAP_V;
     }
-  }, []);
+  }, [lobbyId]);
 
   const submitRun = useCallback(
     async (pipes: number) => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { getHostPlayerId, getCallerPlayerId } from "@/lib/lobby/host";
 
 /**
  * Reset an ENDED custom lobby back to the waiting room so the same group
@@ -14,8 +15,9 @@ export async function POST(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  let session;
   try {
-    await requireSession();
+    session = await requireSession();
   } catch (resp) {
     return resp as Response;
   }
@@ -30,6 +32,15 @@ export async function POST(
     .single();
   if (le || !lobby) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+
+  // Host-only: only the first-seated player can run it back.
+  const [hostId, callerId] = await Promise.all([
+    getHostPlayerId(supabase, lobbyId),
+    getCallerPlayerId(supabase, lobbyId, session),
+  ]);
+  if (!callerId || hostId !== callerId) {
+    return NextResponse.json({ error: "host only" }, { status: 403 });
   }
   // Rematch only makes sense for custom lobbies; public matchmaking lobbies
   // dissolve at the end and players re-queue from the hub.

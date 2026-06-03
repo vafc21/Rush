@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { generateNickname } from "@/lib/lobby/nicknames";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { getHostPlayerId, getCallerPlayerId } from "@/lib/lobby/host";
 
 const COUNTDOWN_MS = 5000;
 
@@ -10,8 +11,9 @@ export async function POST(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  let session;
   try {
-    await requireSession();
+    session = await requireSession();
   } catch (resp) {
     return resp as Response;
   }
@@ -29,6 +31,19 @@ export async function POST(
   }
   if (lobby.status !== "waiting") {
     return NextResponse.json({ error: "already started" }, { status: 409 });
+  }
+
+  // Custom lobbies are host-controlled: only the first-seated player may
+  // start the match. (Public matchmaking lobbies are auto-started by the
+  // matchmaker, so there's no host to gate on.)
+  if (lobby.type === "private") {
+    const [hostId, callerId] = await Promise.all([
+      getHostPlayerId(supabase, lobbyId),
+      getCallerPlayerId(supabase, lobbyId, session),
+    ]);
+    if (!callerId || hostId !== callerId) {
+      return NextResponse.json({ error: "host only" }, { status: 403 });
+    }
   }
 
   // Auto-fill bots only for matchmaking lobbies. Custom (private)

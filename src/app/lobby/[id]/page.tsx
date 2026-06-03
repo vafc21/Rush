@@ -7,6 +7,7 @@ import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
 import { GameTabs } from "@/components/GameTabs";
 import { LastChanceZone } from "@/components/LastChanceZone";
 import { EndOfRoundGraph } from "@/components/EndOfRoundGraph";
+import { SelfTrendGraph } from "@/components/SelfTrendGraph";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
 import Link from "next/link";
@@ -44,6 +45,8 @@ export default function LobbyPage() {
   // Keeps the Last Chance zone mounted through a win reveal (wheel spin /
   // mines flip), even after the win has already cleared our busted flag.
   const [lastChanceHold, setLastChanceHold] = useState(false);
+  // Our own balance over the live round — drives the "Your run" sparkline.
+  const [balHistory, setBalHistory] = useState<number[]>([]);
   // Once we've ever found ourselves in the lobby, track that. If we then
   // disappear (host kicked/banned us), redirect home.
   const everSeenSelfRef = useRef(false);
@@ -81,6 +84,23 @@ export default function LobbyPage() {
     const t = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
+
+  // Track our own balance across the live round so the "Your run" sparkline
+  // can plot it. Appends a point whenever our balance actually changes;
+  // resets whenever we're not in an active round.
+  useEffect(() => {
+    if (snapshot?.lobby.status !== "active") {
+      setBalHistory((h) => (h.length === 0 ? h : []));
+      return;
+    }
+    const me = snapshot.players.find((p) => p.nickname === selfNickname);
+    if (!me) return;
+    setBalHistory((h) => {
+      if (h.length > 0 && h[h.length - 1] === me.balance_cents) return h;
+      const next = [...h, me.balance_cents];
+      return next.length > 150 ? next.slice(-150) : next;
+    });
+  }, [snapshot, selfNickname]);
 
   // Pusher subscription
   useLobbyChannel(id ?? null, (e) => {
@@ -336,6 +356,9 @@ export default function LobbyPage() {
         </div>
         <div className="flex w-full max-w-md flex-col gap-3 md:w-72 md:shrink-0">
           <LeaderboardPanel seats={seats} selfId={self?.id ?? null} />
+          {snapshot.lobby.status === "active" && !inCountdown && self && (
+            <SelfTrendGraph points={balHistory} baselineCents={100000} />
+          )}
           {snapshot.lobby.status === "active" && !inCountdown && (
             <ReactionsBar lobbyId={id!} />
           )}

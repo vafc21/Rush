@@ -13,6 +13,7 @@ export type GameType =
   | "wheel"
   | "slots"
   | "diamonds"
+  | "chicken"
   | "last_chance_mines"
   | "last_chance_wheel"
   | "flappy";

@@ -14,6 +14,7 @@ import { BaccaratGame } from "./BaccaratGame";
 import { WheelGame } from "./WheelGame";
 import { SlotsGame } from "./SlotsGame";
 import { DiamondsGame } from "./DiamondsGame";
+import { ChickenGame } from "./ChickenGame";
 
 type Tab =
   | "crash"
@@ -29,7 +30,8 @@ type Tab =
   | "baccarat"
   | "wheel"
   | "slots"
-  | "diamonds";
+  | "diamonds"
+  | "chicken";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "crash", label: "Crash", icon: "🚀" },
@@ -46,6 +48,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "wheel", label: "Wheel", icon: "🎯" },
   { id: "slots", label: "Slots", icon: "🎰" },
   { id: "diamonds", label: "Diamonds", icon: "💎" },
+  { id: "chicken", label: "Chicken", icon: "🐔" },
 ];
 
 export function GameTabs({
@@ -95,6 +98,7 @@ export function GameTabs({
       {active === "wheel" && <WheelGame lobbyId={lobbyId} balanceCents={balanceCents} />}
       {active === "slots" && <SlotsGame lobbyId={lobbyId} balanceCents={balanceCents} />}
       {active === "diamonds" && <DiamondsGame lobbyId={lobbyId} balanceCents={balanceCents} />}
+      {active === "chicken" && <ChickenGame lobbyId={lobbyId} balanceCents={balanceCents} />}
     </div>
   );
 }

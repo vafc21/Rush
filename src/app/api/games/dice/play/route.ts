@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
+import { lobbyIsActive } from "@/lib/lobby/active";
 import { placeDiceBet } from "./handler";
 
 export async function POST(req: NextRequest) {
@@ -21,6 +22,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getServiceSupabase();
+
+  // Only place bets while the round is live — not in the waiting room
+  // (pre-round balance padding) or after it has ended.
+  if (!(await lobbyIsActive(supabase, body.lobbyId))) {
+    return NextResponse.json({ error: "round not active" }, { status: 409 });
+  }
   const identifier = session.kind === "guest" ? session.nickname : session.username;
   const { data: seat } = await supabase
     .from("lobby_players")

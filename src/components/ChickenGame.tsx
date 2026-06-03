@@ -180,17 +180,19 @@ export function ChickenGame({
     <div className="w-full max-w-md space-y-4 rounded-lg bg-panel p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">🐔 Chicken</h2>
-        {game?.status === "playing" && (
-          <div className="text-xs text-muted">
-            Multi{" "}
-            <span className="font-bold tabular-nums text-accent">
+        {game?.status === "playing" ? (
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="rounded bg-bg px-2 py-1 text-muted">
+              Lane{" "}
+              <span className="tabular-nums text-white">{game.crossed}</span>/
+              {CHICKEN_LANES}
+            </span>
+            <span className="rounded bg-accent/15 px-2 py-1 font-bold tabular-nums text-accent">
               {game.multiplier.toFixed(2)}x
-            </span>{" "}
-            ·{" "}
-            <span className="tabular-nums text-white">
-              {pts(potentialPayout)} pts
             </span>
           </div>
+        ) : (
+          <div className="text-xs text-muted">Cross the road 🚗</div>
         )}
       </div>
 
@@ -200,58 +202,111 @@ export function ChickenGame({
           trigger={revealed && game?.status === "cashed" ? game.betId : false}
           intensity={game && game.multiplier >= 5 ? 1.8 : 1}
         />
-        <div className="flex gap-1.5 overflow-x-auto rounded-md bg-bg/40 p-2">
-          {/* Sidewalk / start */}
-          <div className="flex h-20 w-14 shrink-0 flex-col items-center justify-center rounded-md bg-bg/60 text-[10px] text-muted">
-            <span className="text-xl leading-none">
-              {game?.status === "playing" && game.crossed === 0 ? "🐔" : "🚦"}
-            </span>
-            <span className="mt-1">Start</span>
-          </div>
-
-          {Array.from({ length: CHICKEN_LANES }, (_, idx) => {
-            const lane = idx + 1; // 1-indexed lane
-            const mult = chickenMultiplier(diff, lane);
-            const isCrossed = !!game && lane <= game.crossed;
-            const isChickenHere =
-              !!game &&
-              game.status !== "squashed" &&
-              lane === game.crossed &&
-              game.crossed > 0;
-            const isNext =
-              !!game && game.status === "playing" && lane === game.crossed + 1;
-            const isCrashLane =
-              !!game && game.status === "squashed" && game.crashLane === lane;
-
-            let cls = "bg-bg/40 text-muted/50"; // future / preview lane
-            if (isCrashLane) cls = "bg-red-500/25 text-red-300 ring-1 ring-red-400";
-            else if (isChickenHere) cls = "bg-accent/30 text-accent ring-1 ring-accent";
-            else if (isCrossed) cls = "bg-accent/15 text-accent/70";
-            else if (isNext)
-              cls =
-                "bg-bg text-white ring-2 ring-accent cursor-pointer hover:bg-accent/20 hover:scale-[1.05] active:scale-95";
-
-            let emoji = "";
-            if (isCrashLane) emoji = "💥";
-            else if (isChickenHere) emoji = "🐔";
-            else if (isCrossed) emoji = "🐾";
-
-            const animate = isChickenHere || isCrashLane;
-
-            return (
-              <button
-                key={lane}
-                ref={lane === focusLane ? activeRef : undefined}
-                disabled={!isNext || busy}
-                onClick={isNext ? step : undefined}
-                className={`flex h-20 w-14 shrink-0 flex-col items-center justify-center rounded-md text-xs font-bold tabular-nums transition-all ${cls}`}
-                style={animate ? { animation: "rush-pop 280ms ease-out" } : undefined}
+        <div className="overflow-hidden rounded-lg ring-1 ring-black/40">
+          {/* curb stripes top + bottom */}
+          <div className="h-1.5 bg-gradient-to-r from-brand/50 via-brand/10 to-brand/50" />
+          <div className="flex overflow-x-auto bg-gradient-to-b from-[#0a141d] via-[#0e1b26] to-[#0a141d] py-3">
+            {/* Grass curb — where the chicken starts */}
+            <div className="flex h-28 w-12 shrink-0 flex-col items-center justify-center bg-gradient-to-b from-emerald-900/60 to-emerald-950/60">
+              <span
+                className="text-3xl leading-none"
+                style={
+                  game?.status === "playing" && game.crossed === 0
+                    ? { animation: "rush-bob 1.1s ease-in-out infinite" }
+                    : undefined
+                }
               >
-                <span className="text-xl leading-none">{emoji}</span>
-                <span className="mt-1 text-[10px]">{mult.toFixed(2)}x</span>
-              </button>
-            );
-          })}
+                {game?.status === "playing" && game.crossed === 0 ? "🐔" : "🚦"}
+              </span>
+              <span className="mt-1 text-[9px] uppercase tracking-wider text-emerald-300/70">
+                Curb
+              </span>
+            </div>
+
+            {Array.from({ length: CHICKEN_LANES }, (_, idx) => {
+              const lane = idx + 1; // 1-indexed lane
+              const mult = chickenMultiplier(diff, lane);
+              const isCrossed = !!game && lane <= game.crossed;
+              const isChickenHere =
+                !!game &&
+                game.status !== "squashed" &&
+                lane === game.crossed &&
+                game.crossed > 0;
+              const isNext =
+                !!game && game.status === "playing" && lane === game.crossed + 1;
+              const isCrashLane =
+                !!game && game.status === "squashed" && game.crashLane === lane;
+
+              let laneBg = "bg-transparent";
+              if (isCrashLane) laneBg = "bg-red-600/25";
+              else if (isChickenHere) laneBg = "bg-accent/20";
+              else if (isCrossed) laneBg = "bg-accent/10";
+              else if (isNext) laneBg = "bg-brand/10";
+
+              const chipCls = isCrashLane
+                ? "bg-red-500/50 text-red-50"
+                : isNext
+                  ? "bg-brand text-bg"
+                  : isCrossed
+                    ? "bg-accent/30 text-accent"
+                    : "bg-black/40 text-muted";
+
+              return (
+                <button
+                  key={lane}
+                  ref={lane === focusLane ? activeRef : undefined}
+                  disabled={!isNext || busy}
+                  onClick={isNext ? step : undefined}
+                  className={`relative flex h-28 w-16 shrink-0 flex-col items-center justify-between border-l-2 border-dashed border-white/10 py-2 transition-colors ${laneBg} ${
+                    isNext ? "cursor-pointer hover:bg-brand/20 active:scale-95" : ""
+                  }`}
+                >
+                  {/* glowing target ring on the next lane */}
+                  {isNext && (
+                    <span className="pointer-events-none absolute inset-1 animate-pulse rounded-md ring-2 ring-brand/70" />
+                  )}
+                  {/* top: forward arrow on the next lane */}
+                  <span className="h-4 text-sm leading-none text-brand">
+                    {isNext ? "▲" : ""}
+                  </span>
+                  {/* center: chicken / car / paw print */}
+                  <span
+                    className="text-3xl leading-none"
+                    style={
+                      isCrashLane
+                        ? { animation: "rush-car 360ms ease-out both" }
+                        : isChickenHere
+                          ? { animation: "rush-hop 360ms ease-out" }
+                          : undefined
+                    }
+                  >
+                    {isCrashLane
+                      ? "🚗"
+                      : isChickenHere
+                        ? "🐔"
+                        : isCrossed
+                          ? "🐾"
+                          : ""}
+                  </span>
+                  {/* bottom: multiplier chip */}
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${chipCls}`}
+                  >
+                    {mult.toFixed(2)}x
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* Finish line — clearing every lane lands here */}
+            <div className="flex h-28 w-12 shrink-0 flex-col items-center justify-center border-l-2 border-dashed border-white/10 bg-gradient-to-b from-zinc-600/40 to-zinc-900/40">
+              <span className="text-2xl leading-none">🏁</span>
+              <span className="mt-1 text-[9px] uppercase tracking-wider text-secondary/70">
+                Safe
+              </span>
+            </div>
+          </div>
+          <div className="h-1.5 bg-gradient-to-r from-brand/50 via-brand/10 to-brand/50" />
         </div>
       </div>
 

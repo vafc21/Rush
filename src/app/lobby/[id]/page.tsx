@@ -162,12 +162,36 @@ export default function LobbyPage() {
               return fr ? { ...p, final_rank: fr.rank, balance_cents: fr.balanceCents } : p;
             }),
           };
+        case "lobby_reset":
+          // Host hit "Play Again": the lobby is back in the waiting room with
+          // every seat restored to the starting balance.
+          return {
+            ...s,
+            lobby: {
+              ...s.lobby,
+              status: "waiting",
+              started_at: null,
+              ended_at: null,
+            },
+            players: s.players.map((p) => ({
+              ...p,
+              balance_cents: 100000,
+              is_busted: false,
+              final_rank: null,
+            })),
+          };
         default:
           return s;
       }
     });
     if (e.type === "lobby_starting") setStartsAt(e.startsAt);
     if (e.type === "lobby_active") setEndsAt(e.endsAt);
+    if (e.type === "lobby_reset") {
+      // Clear the previous round's timers so the waiting room shows cleanly.
+      setStartsAt(null);
+      setEndsAt(null);
+      setLastChanceHold(false);
+    }
   });
 
   // Bot activity poller + crash-tick poller. Both run on a 4-second cadence
@@ -302,7 +326,12 @@ export default function LobbyPage() {
             )
           )}
           {snapshot.lobby.status === "ended" && (
-            <EndOfRound lobbyId={id!} selfNickname={selfNickname} />
+            <EndOfRound
+              lobbyId={id!}
+              selfNickname={selfNickname}
+              isHost={snapshot.players[0]?.nickname === selfNickname}
+              isPrivate={snapshot.lobby.type === "private"}
+            />
           )}
         </div>
         <div className="flex w-full max-w-md flex-col gap-3 md:w-72 md:shrink-0">
@@ -544,27 +573,62 @@ function Countdown({ startsAt, nowMs }: { startsAt: number; nowMs: number }) {
 function EndOfRound({
   lobbyId,
   selfNickname,
+  isHost,
+  isPrivate,
 }: {
   lobbyId: string;
   selfNickname: string | null;
+  isHost: boolean;
+  isPrivate: boolean;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function rematch() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/lobbies/${lobbyId}/rematch`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "could not restart");
+      setBusy(false);
+      return;
+    }
+    // The lobby_reset broadcast flips this screen back to the waiting room;
+    // no navigation needed. Leave the button disabled until it lands.
+  }
+
   return (
     <div className="space-y-4">
       <EndOfRoundGraph lobbyId={lobbyId} selfNickname={selfNickname} />
+
+      {/* Custom lobbies can run it back without leaving — the host resets
+          the room and everyone returns to the waiting screen. */}
+      {isPrivate && isHost && (
+        <button
+          onClick={rematch}
+          disabled={busy}
+          className="w-full rounded-md bg-accent px-4 py-3 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+        >
+          {busy ? "Resetting…" : "🔁 Play Again (same lobby)"}
+        </button>
+      )}
+      {isPrivate && !isHost && (
+        <p className="rounded-md bg-panel px-4 py-3 text-center text-xs text-muted">
+          Waiting for the host to start another match…
+        </p>
+      )}
+      {error && <p className="text-center text-sm text-red-400">{error}</p>}
+
       <div className="flex gap-3">
         <Link
           href="/play"
           replace
-          className="flex-1 rounded-md bg-accent px-4 py-3 text-center text-sm font-bold text-bg transition hover:opacity-90 active:scale-[0.98]"
+          className="flex-1 rounded-md bg-panel px-4 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-panel/80 active:scale-[0.98]"
         >
           Back to Hub
-        </Link>
-        <Link
-          href="/play"
-          replace
-          className="rounded-md bg-panel px-4 py-3 text-center text-sm font-semibold text-secondary transition hover:bg-panel/80 active:scale-[0.98]"
-        >
-          New Match
         </Link>
       </div>
     </div>

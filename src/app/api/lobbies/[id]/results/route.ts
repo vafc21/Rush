@@ -37,11 +37,19 @@ export async function GET(
     .select("id, nickname, is_bot, balance_cents, final_rank")
     .eq("lobby_id", id);
 
-  const { data: bets } = await supabase
+  // Scope to the current match. A custom lobby can be replayed ("Play
+  // Again"), which reuses the same lobby row — without this filter the graph
+  // would fold in every prior match's bets. started_at marks the active
+  // round's start; all in-round bets land at or after it.
+  let betsQuery = supabase
     .from("bets")
     .select("lobby_player_id, placed_at, bet_amount_cents, payout_cents")
     .eq("lobby_id", id)
     .order("placed_at", { ascending: true });
+  if (lobby.started_at) {
+    betsQuery = betsQuery.gte("placed_at", lobby.started_at);
+  }
+  const { data: bets } = await betsQuery;
 
   return NextResponse.json({
     lobby,

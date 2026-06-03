@@ -27,6 +27,7 @@ export type LobbyEvent =
       multiplier: number;
       payoutCents: number;
     }
-  | { type: "lobby_ended"; lobbyId: string; finalRanks: { lobbyPlayerId: string; rank: number; balanceCents: number }[] };
+  | { type: "lobby_ended"; lobbyId: string; finalRanks: { lobbyPlayerId: string; rank: number; balanceCents: number }[] }
+  | { type: "lobby_reset"; lobbyId: string };
 
 export const LOBBY_EVENT = "lobby-event";

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import { refundPendingBets } from "@/lib/games/refund";
 
 export async function GET() {
   const supabase = getServiceSupabase();
@@ -22,6 +23,11 @@ export async function GET() {
       .from("lobbies")
       .update({ status: "ended", ended_at: now.toISOString() })
       .eq("id", l.id);
+
+    // Refund any bet still mid-play (stake deducted, never resolved) so a
+    // last-second hand doesn't just swallow the wager. Must run before we
+    // read balances for the final ranking.
+    await refundPendingBets(supabase, l.id);
 
     // Compute final ranks
     const { data: players } = await supabase

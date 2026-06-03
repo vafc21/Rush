@@ -62,6 +62,14 @@ export function LastChanceWheel({
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      // The server rate-limits spins. If we hit that (e.g. after remounting
+      // the widget wiped our local cooldown), adopt the server's remaining
+      // time rather than showing an error.
+      if (res.status === 429 && typeof body.retryAfterMs === "number") {
+        setCooldownUntil(Date.now() + body.retryAfterMs);
+        setSpinning(false);
+        return;
+      }
       setError(body.error ?? "spin failed");
       setSpinning(false);
       return;

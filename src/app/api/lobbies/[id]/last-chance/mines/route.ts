@@ -3,6 +3,10 @@ import { randomInt } from "crypto";
 import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
+import {
+  MINES_COOLDOWN_MS,
+  lastChanceCooldownRemaining,
+} from "@/lib/games/lastChance";
 
 const TILES = 25;
 const REBUY_CENTS = 50_000; // $500
@@ -59,6 +63,23 @@ export async function POST(
     .single();
   if (!lobby || lobby.status !== "active") {
     return NextResponse.json({ error: "round over" }, { status: 409 });
+  }
+
+  // Authoritative cooldown — the client cooldown is wiped if the player
+  // remounts the widget (switching Last Chance sub-tabs), so picks must be
+  // rate-limited here or they could be spammed until the rebuy lands.
+  const remainingMs = await lastChanceCooldownRemaining(
+    supabase,
+    lobbyId,
+    seat.id,
+    "last_chance_mines",
+    MINES_COOLDOWN_MS
+  );
+  if (remainingMs > 0) {
+    return NextResponse.json(
+      { error: "cooldown", retryAfterMs: remainingMs },
+      { status: 429 }
+    );
   }
 
   const safeTile = randomInt(0, TILES);

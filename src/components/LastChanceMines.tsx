@@ -54,6 +54,15 @@ export function LastChanceMines({
     setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      // The server rate-limits picks. If we hit that (e.g. after remounting
+      // the widget wiped our local cooldown), adopt the server's remaining
+      // time rather than showing an error.
+      if (res.status === 429 && typeof body.retryAfterMs === "number") {
+        setPicked(null);
+        setCooldownUntil(Date.now() + body.retryAfterMs);
+        setTimeout(() => setCooldownUntil(null), body.retryAfterMs);
+        return;
+      }
       setError(body.error ?? "click failed");
       setPicked(null);
       return;
@@ -129,8 +138,13 @@ export function LastChanceMines({
         })}
       </div>
 
-      {!result && !error && (
+      {!result && !error && !onCooldown && (
         <p className="text-xs text-muted">Pick any tile</p>
+      )}
+      {!result && onCooldown && (
+        <p className="text-xs text-muted">
+          Cooling down… {Math.ceil(cooldownLeft / 1000)}s
+        </p>
       )}
       {result?.won && (
         <div className="rounded-md bg-accent/10 px-3 py-3 text-sm font-bold text-accent">

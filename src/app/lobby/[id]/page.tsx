@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { TopBar } from "@/components/TopBar";
+import { LoadingScreen } from "@/components/Spinner";
 import { Button } from "@/components/Button";
 import { LeaderboardPanel, Seat } from "@/components/LeaderboardPanel";
 import { GameTabs } from "@/components/GameTabs";
@@ -27,6 +28,7 @@ type Snapshot = {
   players: Array<{
     id: string;
     nickname: string;
+    is_member: boolean;
     is_bot: boolean;
     is_busted: boolean;
     balance_cents: number;
@@ -123,6 +125,7 @@ export default function LobbyPage() {
               {
                 id: e.lobbyPlayerId,
                 nickname: e.nickname,
+                is_member: e.isMember,
                 is_bot: e.isBot,
                 is_busted: false,
                 balance_cents: 100000,
@@ -269,7 +272,13 @@ export default function LobbyPage() {
     }
   }, [snapshot, selfStillPresent, router]);
 
-  if (!snapshot) return <main className="p-6">Loading…</main>;
+  if (!snapshot)
+    return (
+      <>
+        <TopBar />
+        <LoadingScreen label="Loading lobby…" />
+      </>
+    );
 
   const self = snapshot.players.find((p) => p.nickname === selfNickname);
   const seats: Seat[] = snapshot.players.map((p) => ({
@@ -278,6 +287,7 @@ export default function LobbyPage() {
     balanceCents: p.balance_cents,
     isBusted: p.is_busted,
     isBot: p.is_bot,
+    isMember: p.is_member,
   }));
 
   const secondsLeft =

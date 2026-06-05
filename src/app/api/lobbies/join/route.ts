@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
       lobbyPlayerId: seated.id,
       nickname: seated.nickname,
       isBot: seated.is_bot,
+      isMember: userId !== null,
     });
   }
 

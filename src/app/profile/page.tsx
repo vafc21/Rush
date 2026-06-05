@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/TopBar";
+import { Spinner } from "@/components/Spinner";
 import { pts } from "@/lib/format";
 
 type Stats = {
@@ -111,7 +112,8 @@ export default function ProfilePage() {
         )}
 
         {!stats && !error && (
-          <div className="rounded-lg bg-panel p-6 text-center text-sm text-muted">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg bg-panel p-8 text-sm text-muted">
+            <Spinner className="h-8 w-8" />
             Loading stats…
           </div>
         )}

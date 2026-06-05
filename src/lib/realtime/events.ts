@@ -3,7 +3,14 @@ export const USER_CHANNEL = (lobbyPlayerId: string) =>
   `private-user-${lobbyPlayerId}`;
 
 export type LobbyEvent =
-  | { type: "player_joined"; lobbyPlayerId: string; nickname: string; isBot: boolean }
+  | {
+      type: "player_joined";
+      lobbyPlayerId: string;
+      nickname: string;
+      isBot: boolean;
+      /** True only for a registered account — not guests, not CPUs. */
+      isMember: boolean;
+    }
   | { type: "player_left"; lobbyPlayerId: string }
   | { type: "lobby_starting"; lobbyId: string; startsAt: number }
   | { type: "lobby_active"; lobbyId: string; endsAt: number }

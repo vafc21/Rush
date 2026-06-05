@@ -76,6 +76,7 @@ export async function POST(
           lobbyPlayerId: bot.id,
           nickname: bot.nickname,
           isBot: bot.is_bot,
+          isMember: false,
         });
       }
     }

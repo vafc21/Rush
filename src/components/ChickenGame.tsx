@@ -59,13 +59,15 @@ export function ChickenGame({
   }, [terminal, game?.status, game?.betId]);
 
   // Keep the chicken's lane scrolled into view as it crosses the road.
+  // `revealed` is a dep so that, after a cash-out, the camera pans to the
+  // dodged car once we reveal where the run would have ended.
   useEffect(() => {
     activeRef.current?.scrollIntoView({
       behavior: "smooth",
       inline: "center",
       block: "nearest",
     });
-  }, [game?.crossed, game?.status]);
+  }, [game?.crossed, game?.status, revealed]);
 
   async function start() {
     const betCents = Math.round(parseFloat(betDollars || "0") * 100);
@@ -173,7 +175,10 @@ export function ChickenGame({
       ? game.crashLane ?? game.crossed
       : game.status === "playing"
         ? Math.min(game.crossed + 1, CHICKEN_LANES)
-        : game.crossed
+        : // cashed — once revealed, pan to the car we dodged (if there was one)
+          revealed && game.crashLane && game.crashLane <= CHICKEN_LANES
+          ? game.crashLane
+          : game.crossed
     : 0;
 
   return (
@@ -236,20 +241,33 @@ export function ChickenGame({
                 !!game && game.status === "playing" && lane === game.crossed + 1;
               const isCrashLane =
                 !!game && game.status === "squashed" && game.crashLane === lane;
+              // After a successful cash-out, reveal the lane a car was actually
+              // waiting on — i.e. where the run *would* have ended had you kept
+              // going. Mirrors Mines revealing its bombs once the round is over.
+              // (crashLane is CHICKEN_LANES+1 on a clean run, so it can never
+              // match a real lane here — nothing is revealed in that case.)
+              const isWouldHaveLostLane =
+                !!game &&
+                game.status === "cashed" &&
+                revealed &&
+                game.crashLane === lane;
 
               let laneBg = "bg-transparent";
               if (isCrashLane) laneBg = "bg-red-600/25";
+              else if (isWouldHaveLostLane) laneBg = "bg-red-500/15";
               else if (isChickenHere) laneBg = "bg-accent/20";
               else if (isCrossed) laneBg = "bg-accent/10";
               else if (isNext) laneBg = "bg-brand/10";
 
               const chipCls = isCrashLane
                 ? "bg-red-500/50 text-red-50"
-                : isNext
-                  ? "bg-brand text-bg"
-                  : isCrossed
-                    ? "bg-accent/30 text-accent"
-                    : "bg-black/40 text-muted";
+                : isWouldHaveLostLane
+                  ? "bg-red-500/25 text-red-200"
+                  : isNext
+                    ? "bg-brand text-bg"
+                    : isCrossed
+                      ? "bg-accent/30 text-accent"
+                      : "bg-black/40 text-muted";
 
               return (
                 <button
@@ -271,22 +289,28 @@ export function ChickenGame({
                   </span>
                   {/* center: chicken / car / paw print */}
                   <span
-                    className="text-3xl leading-none"
+                    className={`text-3xl leading-none ${
+                      isWouldHaveLostLane ? "opacity-60" : ""
+                    }`}
                     style={
                       isCrashLane
                         ? { animation: "rush-car 360ms ease-out both" }
-                        : isChickenHere
-                          ? { animation: "rush-hop 360ms ease-out" }
-                          : undefined
+                        : isWouldHaveLostLane
+                          ? { animation: "rush-pop 300ms ease-out both" }
+                          : isChickenHere
+                            ? { animation: "rush-hop 360ms ease-out" }
+                            : undefined
                     }
                   >
                     {isCrashLane
                       ? "🚗"
-                      : isChickenHere
-                        ? "🐔"
-                        : isCrossed
-                          ? "🐾"
-                          : ""}
+                      : isWouldHaveLostLane
+                        ? "🚗"
+                        : isChickenHere
+                          ? "🐔"
+                          : isCrossed
+                            ? "🐾"
+                            : ""}
                   </span>
                   {/* bottom: multiplier chip */}
                   <span
@@ -416,6 +440,17 @@ export function ChickenGame({
           <p className="text-sm text-accent/80">
             Crossed {game.crossed} lanes at {game.multiplier.toFixed(2)}x
           </p>
+          {game.crashLane && game.crashLane <= CHICKEN_LANES ? (
+            <p className="text-xs text-red-300/90">
+              🚗 A car was waiting on lane {game.crashLane} — you bailed{" "}
+              {game.crashLane - game.crossed} lane
+              {game.crashLane - game.crossed === 1 ? "" : "s"} early
+            </p>
+          ) : (
+            <p className="text-xs text-emerald-300/80">
+              🍀 The road was clear the whole way — you could&apos;ve gone for it
+            </p>
+          )}
           <button
             onClick={reset}
             className="text-xs font-semibold text-muted underline hover:text-white"

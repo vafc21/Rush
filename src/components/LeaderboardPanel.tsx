@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedAmount } from "./AnimatedAmount";
+import { PlayerStatsModal } from "./PlayerStatsModal";
 
 export type Seat = {
   id: string;
@@ -8,6 +9,11 @@ export type Seat = {
   balanceCents: number;
   isBusted: boolean;
   isBot?: boolean;
+  /**
+   * True for a registered account (not a guest, not a CPU). Drives the
+   * "Member" badge and the clickable-stats link.
+   */
+  isMember?: boolean;
 };
 
 export function LeaderboardPanel({
@@ -25,6 +31,8 @@ export function LeaderboardPanel({
   const [flashing, setFlashing] = useState<Map<string, "up" | "down">>(
     new Map()
   );
+  // Username whose stats modal is open (members only), or null.
+  const [statsFor, setStatsFor] = useState<string | null>(null);
 
   useEffect(() => {
     const prev = previousRef.current;
@@ -62,6 +70,11 @@ export function LeaderboardPanel({
       {sorted.map((s, i) => {
         const isSelf = s.id === selfId;
         const flash = flashing.get(s.id);
+        // A registered member (not a guest, not a CPU) — gets the badge and
+        // a clickable name that opens their lifetime stats.
+        const isMember = !s.isBot && !!s.isMember;
+        // The developer account — gets a fancy gold name + black "Dev" badge.
+        const isDev = isMember && s.nickname.toLowerCase() === "vlad";
         return (
           <div
             key={s.id}
@@ -77,17 +90,44 @@ export function LeaderboardPanel({
           >
             <span className="flex min-w-0 items-center gap-2">
               <span className="w-4 text-muted tabular-nums">{i + 1}</span>
-              <span className="truncate">{s.nickname}</span>
-              {s.isBot && (
+              {isMember ? (
+                <button
+                  type="button"
+                  onClick={() => setStatsFor(s.nickname)}
+                  title={`View ${s.nickname}'s stats`}
+                  className={
+                    isDev
+                      ? "truncate bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-300 bg-clip-text font-extrabold italic tracking-wide text-transparent drop-shadow-[0_0_6px_rgba(251,191,36,0.45)] transition hover:opacity-80"
+                      : "truncate underline decoration-dotted underline-offset-2 transition hover:text-brand"
+                  }
+                >
+                  {s.nickname}
+                </button>
+              ) : (
+                <span className="truncate">{s.nickname}</span>
+              )}
+              {s.isBot ? (
                 <span className="rounded bg-secondary/15 px-1 py-0.5 text-[9px] font-bold text-secondary">
                   CPU
                 </span>
+              ) : isDev ? (
+                <span className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-black shadow-[0_0_8px_rgba(251,191,36,0.55)] ring-1 ring-amber-200/60">
+                  Dev
+                </span>
+              ) : (
+                isMember && (
+                  <span className="rounded bg-brand/15 px-1 py-0.5 text-[9px] font-bold text-brand">
+                    Member
+                  </span>
+                )
               )}
             </span>
             <AnimatedAmount cents={s.balanceCents} durationMs={500} />
           </div>
         );
       })}
+
+      <PlayerStatsModal username={statsFor} onClose={() => setStatsFor(null)} />
     </aside>
   );
 }

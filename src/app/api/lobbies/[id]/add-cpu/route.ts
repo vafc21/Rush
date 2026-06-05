@@ -82,6 +82,7 @@ export async function POST(
     lobbyPlayerId: inserted.id,
     nickname: inserted.nickname,
     isBot: inserted.is_bot,
+    isMember: false,
   });
 
   return NextResponse.json({

@@ -44,8 +44,6 @@ export function CrashGame({
   const [nowMs, setNowMs] = useState(Date.now());
   const [myBet, setMyBet] = useState<MyBet | null>(null);
   const [betDollars, setBetDollars] = useState("1");
-  const [autoCashout, setAutoCashout] = useState("2.00");
-  const [autoCashoutEnabled, setAutoCashoutEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [floats, setFloats] = useState<FloatingCashout[]>([]);
@@ -112,19 +110,6 @@ export function CrashGame({
       }
     }
   }
-
-  // Auto-cashout (client-side guard so the cashout happens even if the
-  // server cron is slow). The server still validates the multiplier.
-  useEffect(() => {
-    if (phase !== "running" || !myBet || myBet.status !== "pending") return;
-    if (!autoCashoutEnabled) return;
-    const target = parseFloat(autoCashout);
-    if (Number.isNaN(target) || target < 1.01) return;
-    if (currentMultiplier >= target) {
-      cashout(target);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, myBet?.status, currentMultiplier, autoCashoutEnabled]);
 
   // Local-dev kickstart for Crash rounds. On Vercel a real cron generates
   // rounds every minute; locally we poll the same endpoint every 2 seconds
@@ -194,14 +179,12 @@ export function CrashGame({
     }
     setBusy(true);
     setError(null);
-    const auto = autoCashoutEnabled ? parseFloat(autoCashout) : undefined;
     const res = await fetch("/api/games/crash/bet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         roundId: round.id,
         betCents,
-        autoCashoutAt: auto,
       }),
     });
     setBusy(false);
@@ -459,28 +442,6 @@ export function CrashGame({
                 Max
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-xs text-muted">
-              <input
-                type="checkbox"
-                checked={autoCashoutEnabled}
-                onChange={(e) => setAutoCashoutEnabled(e.target.checked)}
-                className="accent-accent"
-              />
-              Auto cash out at
-            </label>
-            <input
-              type="number"
-              min="1.01"
-              step="0.10"
-              value={autoCashout}
-              onChange={(e) => setAutoCashout(e.target.value)}
-              disabled={!autoCashoutEnabled}
-              className="w-20 rounded-md bg-bg px-2 py-1 text-center text-sm tabular-nums text-white outline-none ring-1 ring-transparent focus:ring-accent/60 transition disabled:opacity-40"
-            />
-            <span className="text-xs text-muted">x</span>
           </div>
 
           <Button

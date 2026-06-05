@@ -26,9 +26,16 @@ export async function GET(
 
   const { data: players } = await supabase
     .from("lobby_players")
-    .select("id, nickname, is_bot, is_busted, balance_cents, final_rank")
+    .select("id, nickname, user_id, is_bot, is_busted, balance_cents, final_rank")
     .eq("lobby_id", id)
     .order("joined_at");
 
-  return NextResponse.json({ lobby, players: players ?? [] });
+  // Expose member-ness as a boolean rather than leaking the raw user_id.
+  // A "member" is a registered account (user_id set) that isn't a CPU.
+  const shaped = (players ?? []).map(({ user_id, ...p }) => ({
+    ...p,
+    is_member: !p.is_bot && user_id !== null,
+  }));
+
+  return NextResponse.json({ lobby, players: shaped });
 }

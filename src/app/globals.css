@@ -94,13 +94,14 @@ html, body {
   100% { transform: translateX(0) scale(1); }
 }
 
-/* Crate Run: spark shards fly outward from the burst crate and fade. The
-   shard's fixed angle is passed as --ang so each shard keeps its heading
-   while the keyframe drives its distance + scale (transform-only stays
-   visible in throttled tabs). */
-@keyframes rush-crate-spark {
-  0%   { transform: rotate(var(--ang, 0deg)) translateY(0) scale(1); opacity: 1; }
-  100% { transform: rotate(var(--ang, 0deg)) translateY(-30px) scale(0.2); opacity: 0; }
+/* Crate Run: the winning block flashes when the case-opening bar stops
+   under the center selector — a quick scale punch that settles back to
+   rest. Transform-only so it stays visible in throttled/backgrounded tabs;
+   the rarity-colored glow is applied inline via box-shadow. */
+@keyframes rush-crate-win {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
 }
 
 @keyframes rush-float {

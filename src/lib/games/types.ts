@@ -14,6 +14,7 @@ export type GameType =
   | "slots"
   | "diamonds"
   | "chicken"
+  | "crate_run"
   | "last_chance_mines"
   | "last_chance_wheel"
   | "flappy";

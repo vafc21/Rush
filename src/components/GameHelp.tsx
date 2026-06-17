@@ -124,6 +124,14 @@ const HELP: Record<string, Help> = {
       "Harder difficulty = more risk per lane but faster multiplier growth.",
     ],
   },
+  crate: {
+    title: "📦 Crate Run",
+    how: [
+      "Your runner dashes to a crate and smashes it open into a random color-rarity tier.",
+      "Each color pays a fixed multiplier on your bet — from a dim Gray loss up to a blazing Gold jackpot.",
+      "Pick a difficulty first: Easy softens losses, Hard bites harder but hides a fatter jackpot. Set your bet and run.",
+    ],
+  },
 };
 
 export function GameHelp({ game }: { game: string }) {

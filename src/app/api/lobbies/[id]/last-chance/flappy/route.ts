@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { getServiceSupabase } from "@/lib/db/supabase";
 import { publishLobby } from "@/lib/realtime/pusher-server";
 import { LAST_CHANCE_REBUY_CENTS } from "@/lib/games/lastChance";
+import { LAST_CHANCE_EXIT_CENTS } from "@/lib/games/limits";
 
 /**
  * POST /api/lobbies/[id]/last-chance/flappy
@@ -18,8 +19,8 @@ import { LAST_CHANCE_REBUY_CENTS } from "@/lib/games/lastChance";
  *      otherwise pay astronomically at MAX_PIPES.)
  *   3. Consume the run marker so one run can't be banked twice.
  *
- * You must be busted to flap; banking back above the minimum bet clears the
- * busted flag.
+ * You must be busted to flap; banking your way back to the Last Chance exit
+ * threshold ($500) clears the busted flag and returns you to the main game.
  */
 
 const BASE_CENTS_PER_PIPE = 20;
@@ -122,8 +123,10 @@ export async function POST(
       p_amount_cents: banked,
     });
     const finalBalance = (newBal as number) ?? seat.balance_cents + banked;
-    // Clear busted flag if banking brought us above min bet
-    if (finalBalance >= 100) {
+    // Clear the busted flag only once banking has climbed the player all the
+    // way back to the Last Chance exit threshold ($500) — not merely above the
+    // $1 min bet. Below it they stay in Last Chance and keep banking Flappy.
+    if (finalBalance >= LAST_CHANCE_EXIT_CENTS) {
       await supabase
         .from("lobby_players")
         .update({ is_busted: false })

@@ -16,12 +16,21 @@ import { pts } from "@/lib/format";
 
 const W = 360;
 const H = 480;
-const GRAVITY = 0.45;
-const FLAP_V = -7.5;
+// Physics constants are tuned for a 60Hz screen. They were originally applied
+// once per animation frame; the loop now scales them by `dt`, the elapsed
+// time since the previous frame measured in 60Hz-frame units (1.0 = 1/60s),
+// so the game plays at the same speed on 60Hz, 120Hz and 144Hz displays.
+const GRAVITY = 0.45; // velocity gained per 60Hz frame
+const FLAP_V = -7.5; // instantaneous velocity set on flap (px / 60Hz-frame)
 const PIPE_W = 60;
 const PIPE_GAP = 130;
 const PIPE_SPACING = 200;
-const PIPE_SPEED = 2.5;
+const PIPE_SPEED = 2.5; // px scrolled per 60Hz frame
+// One reference timestep (60 fps), in milliseconds, and the largest `dt` we
+// allow. Clamping prevents a huge physics jump after the tab was backgrounded
+// (rAF pauses while hidden, so the first frame back can report a large gap).
+const FRAME_MS = 1000 / 60;
+const MAX_DT = 2; // ≈ 1/30s worth of motion in a single step
 const BIRD_X = 80;
 const BIRD_R = 12;
 const GROUND_H = 26; // decorative ground band; death floor stays at y = H
@@ -100,7 +109,7 @@ export function FlappyGame({
     nextPipeIn: 0,
     pipeCount: 0,
     phase: "ready" as Phase,
-    frame: 0,
+    t: 0,
     scroll: 0,
   });
 
@@ -175,18 +184,28 @@ export function FlappyGame({
     if (!ctx) return;
 
     let rafId = 0;
-    const tick = () => {
+    let lastTs = 0;
+    const tick = (ts: number) => {
       const s = stateRef.current;
-      s.frame++;
+
+      // Delta-time in 60Hz-frame units. The first frame (and the first frame
+      // after the tab regains focus, via the visibility reset below) has no
+      // previous timestamp, so we treat it as a single nominal step. Clamp to
+      // MAX_DT so a long gap can't teleport the bird through pipes.
+      let dt = lastTs === 0 ? 1 : (ts - lastTs) / FRAME_MS;
+      lastTs = ts;
+      if (dt > MAX_DT) dt = MAX_DT;
+      if (dt < 0) dt = 0;
+      s.t += dt;
 
       // Update
       if (s.phase === "playing") {
-        s.scroll = (s.scroll + PIPE_SPEED) % 24;
-        s.birdV += GRAVITY;
-        s.birdY += s.birdV;
+        s.scroll = (s.scroll + PIPE_SPEED * dt) % 24;
+        s.birdV += GRAVITY * dt;
+        s.birdY += s.birdV * dt;
 
-        // Spawn pipes
-        s.nextPipeIn--;
+        // Spawn pipes (nextPipeIn is a countdown in 60Hz-frame units)
+        s.nextPipeIn -= dt;
         if (s.nextPipeIn <= 0) {
           const topH = 50 + Math.random() * (H - PIPE_GAP - 100);
           s.pipes.push({ x: W, topH, passed: false });
@@ -194,7 +213,7 @@ export function FlappyGame({
         }
 
         for (const p of s.pipes) {
-          p.x -= PIPE_SPEED;
+          p.x -= PIPE_SPEED * dt;
           // Score when bird passes a pipe
           if (!p.passed && p.x + PIPE_W < BIRD_X - BIRD_R) {
             p.passed = true;
@@ -222,8 +241,8 @@ export function FlappyGame({
       } else if (s.phase === "dead") {
         // Let the bird drop onto the ground for a softer landing.
         if (s.birdY < H - BIRD_R) {
-          s.birdV += GRAVITY;
-          s.birdY = Math.min(H - BIRD_R, s.birdY + s.birdV);
+          s.birdV += GRAVITY * dt;
+          s.birdY = Math.min(H - BIRD_R, s.birdY + s.birdV * dt);
         }
       }
 
@@ -232,7 +251,17 @@ export function FlappyGame({
     };
     rafId = requestAnimationFrame(tick);
 
-    return () => cancelAnimationFrame(rafId);
+    // After the tab is hidden rAF stops firing; drop the stale timestamp so
+    // the next frame restarts the clock instead of integrating the whole gap.
+    const onVisibility = () => {
+      if (document.hidden) lastTs = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   // Input bindings
@@ -347,7 +376,7 @@ type GameState = {
   pipes: Pipe[];
   pipeCount: number;
   phase: Phase;
-  frame: number;
+  t: number;
   scroll: number;
 };
 
@@ -466,8 +495,9 @@ function drawBird(ctx: CanvasRenderingContext2D, s: GameState) {
   const y = s.birdY;
   // tilt: nose up when rising, dive down when falling
   const tilt = Math.max(-0.5, Math.min(1.1, s.birdV / 12));
-  // wing flap cycle
-  const wing = Math.sin(s.frame * 0.4) * 0.5;
+  // wing flap cycle — driven by accumulated time so the flap rate is the same
+  // regardless of refresh rate (matches the old 60Hz cadence of frame * 0.4).
+  const wing = Math.sin(s.t * 0.4) * 0.5;
 
   ctx.save();
   ctx.translate(x, y);

@@ -5,7 +5,7 @@ import { pts } from "@/lib/format";
 
 /**
  * Tiny Flappy Bird-style skill game. Tap (or hit space) to flap, dodge
- * pipes, each pipe passed banks $0.01 × current multiplier, multiplier
+ * pipes, each pipe passed banks 0.20 pts × current multiplier, multiplier
  * doubles every 10 pipes (1× / 2× / 4× / 8× / ...). Dying ends the run
  * and POSTs the pipe count to the server, which credits the player.
  *
@@ -27,7 +27,7 @@ const BIRD_R = 12;
 const GROUND_H = 26; // decorative ground band; death floor stays at y = H
 
 const PIPES_PER_DOUBLING = 10;
-const BASE_CENTS_PER_PIPE = 1;
+const BASE_CENTS_PER_PIPE = 20;
 
 type Pipe = {
   x: number;
@@ -268,7 +268,7 @@ export function FlappyGame({
           🐦 Flappy
         </h2>
         <p className="mt-1 text-xs text-secondary">
-          Tap / space to flap. 0.01 pts per pipe — multiplier doubles every 10.
+          Tap / space to flap. 0.20 pts per pipe — multiplier doubles every 10.
         </p>
       </div>
 

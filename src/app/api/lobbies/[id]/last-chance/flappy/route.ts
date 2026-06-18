@@ -13,24 +13,26 @@ import { LAST_CHANCE_REBUY_CENTS } from "@/lib/games/lastChance";
  *   1. Require a server-anchored run (POST .../flappy/start first) and
  *      validate the reported pipes against the elapsed time — you can't have
  *      passed more pipes than the run had time for.
- *   2. Cap the total banked at the standard Last Chance rebuy (500 pts), so
- *      even a long legit run is a comeback, not a windfall. (The doubling
- *      curve would otherwise pay ~100k pts at MAX_PIPES.)
+ *   2. Cap the total banked at the Flappy ceiling (4× the standard rebuy), so
+ *      even a long legit run stays bounded. (The doubling curve would
+ *      otherwise pay astronomically at MAX_PIPES.)
  *   3. Consume the run marker so one run can't be banked twice.
  *
  * You must be busted to flap; banking back above the minimum bet clears the
  * busted flag.
  */
 
-const BASE_CENTS_PER_PIPE = 1;
+const BASE_CENTS_PER_PIPE = 20;
 const PIPES_PER_DOUBLING = 10;
 const MAX_PIPES = 200;
 // A pipe passes roughly every ~1.3s of real play; gate well under that
 // (slower/throttled tabs only ever take longer per pipe) so legit runs are
 // never rejected while instant huge claims are.
 const MIN_MS_PER_PIPE = 800;
-// Banking ceiling — a comeback, not a jackpot. Mirrors the Wheel/Mines rebuy.
-const FLAPPY_CAP_CENTS = LAST_CHANCE_REBUY_CENTS;
+// Banking ceiling. Flappy is the high-skill, high-reward path, so its ceiling
+// sits well above the flat Wheel/Mines rebuy (4× = the most lucrative game),
+// while staying bounded so even a perfect run is sane within the economy.
+const FLAPPY_CAP_CENTS = LAST_CHANCE_REBUY_CENTS * 4;
 
 function bankedFor(pipes: number): number {
   if (pipes <= 0) return 0;

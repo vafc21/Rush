@@ -348,6 +348,7 @@ export default function LobbyPage() {
             self.is_busted || lastChanceHold ? (
               <LastChanceZone
                 lobbyId={id!}
+                balanceCents={self.balance_cents}
                 onBanked={applyLocalBalance}
                 onHold={setLastChanceHold}
               />
